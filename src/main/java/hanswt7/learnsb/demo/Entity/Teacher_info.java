@@ -16,6 +16,8 @@ public class Teacher_info {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int teacher_id;
     private boolean gender;
+    @Transient
+    private final String ROLE = "Teacher";
 
     @Override
     public String toString() {
@@ -28,6 +30,10 @@ public class Teacher_info {
                 ", gender=" + gender +
                 ", address=" + address +
                 '}';
+    }
+
+    public String getROLE() {
+        return ROLE;
     }
 
     @Embedded

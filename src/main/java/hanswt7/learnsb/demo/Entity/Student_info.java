@@ -3,6 +3,7 @@ import hanswt7.learnsb.demo.Entity.Embeddable.Address;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Transient;
 
 import java.util.Date;
 @Entity
@@ -17,6 +18,14 @@ public class Student_info {
     @Column(unique = true, nullable = false)
     private long phone_number;
     private int age;
+    @Transient
+    private final String ROLE = "Student";
+
+    public String getROLE() {
+        return ROLE;
+    }
+
+
 
     public long getPhone_number() {
         return phone_number;
