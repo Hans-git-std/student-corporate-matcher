@@ -1,9 +1,8 @@
-package hanswt7.learnsb.demo.Entity;
+package hanswt7.Entity;
 
-import hanswt7.learnsb.demo.Entity.Embeddable.Subject;
+import hanswt7.Entity.Embeddable.Subject;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Transient;
 
 @Entity

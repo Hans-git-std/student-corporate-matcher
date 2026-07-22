@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>hanswt7.learnsb</groupId>
-	<artifactId>demo</artifactId>
+	<artifactId>SCME</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name/>
 	<description/>

@@ -1,4 +1,4 @@
-package hanswt7.learnsb.demo;
+package hanswt7;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

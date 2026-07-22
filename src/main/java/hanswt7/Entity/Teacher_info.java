@@ -1,6 +1,6 @@
-package hanswt7.learnsb.demo.Entity;
+package hanswt7.Entity;
 
-import hanswt7.learnsb.demo.Entity.Embeddable.Address;
+import hanswt7.Entity.Embeddable.Address;
 import jakarta.persistence.*;
 
 @Entity

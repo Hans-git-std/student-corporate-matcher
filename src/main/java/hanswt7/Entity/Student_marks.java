@@ -1,6 +1,6 @@
-package hanswt7.learnsb.demo.Entity;
+package hanswt7.Entity;
 
-import hanswt7.learnsb.demo.Entity.Embeddable.Marks;
+import hanswt7.Entity.Embeddable.Marks;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;

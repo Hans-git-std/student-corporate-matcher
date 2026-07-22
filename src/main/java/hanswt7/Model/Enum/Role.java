@@ -1,4 +1,4 @@
-package hanswt7.learnsb.demo.Model.Enum;
+package hanswt7.Model.Enum;
 
 public enum Role {
     STUDENT,

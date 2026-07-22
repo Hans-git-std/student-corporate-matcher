@@ -1,4 +1,4 @@
-package hanswt7.learnsb.demo.Entity;
+package hanswt7.Entity;
 
 import jakarta.persistence.Entity;
 
