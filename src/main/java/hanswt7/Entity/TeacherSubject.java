@@ -6,7 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Transient;
 
 @Entity
-public class Teacher_subject {
+public class TeacherSubject {
     private int Teacher_id;
     @Embedded
     private Subject teacher_subject_id;

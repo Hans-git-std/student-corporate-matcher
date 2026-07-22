@@ -1,13 +1,10 @@
 package hanswt7.Entity;
 import hanswt7.Entity.Embeddable.Address;
-import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Transient;
+import jakarta.persistence.*;
 
 import java.util.Date;
 @Entity
-public class Student_info {
+public class StudentIInfo {
     @Column(nullable = false)
     private String name;
     @Column(unique = true, nullable = false)
@@ -63,6 +60,7 @@ public class Student_info {
     private enum category {Gen,ST,SC,OBC}
     private category category;
     @Embedded
+    @Basic(fetch = FetchType.LAZY)
     private Address address;
 
     public String getName() {

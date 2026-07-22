@@ -8,7 +8,7 @@ import jakarta.persistence.Transient;
 
 @Entity
 @Table
-public class Student_marks {
+public class StudentMarks {
     @Column(unique = true, nullable = false)
     private int roll_no;
     private Marks mark;
@@ -17,10 +17,6 @@ public class Student_marks {
 
     public int getRoll_no() {
         return roll_no;
-    }
-
-    public void setRoll_no(int roll_no) {
-        this.roll_no = roll_no;
     }
 
     public Marks getMark() {

@@ -4,7 +4,7 @@ import hanswt7.Entity.Embeddable.Address;
 import jakarta.persistence.*;
 
 @Entity
-public class Teacher_info {
+public class TeacherInfo {
     @Column(nullable = false)
     private String name;
     @Column(unique = true, nullable = false)
@@ -37,6 +37,7 @@ public class Teacher_info {
     }
 
     @Embedded
+    @Basic(fetch = FetchType.LAZY)
     private Address address;
 
     public String getName() {
