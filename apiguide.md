@@ -42,24 +42,11 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-## 2. Real Email Delivery & SMTP Setup (30-Second Setup)
+## 2. Real Email Delivery 
 
 ### How OTP Delivery Works
 * **Development / Testing Mode (Default):** If no SMTP credentials are configured, the API **prints the 6-digit OTP code directly to the server terminal / console**. This lets developers and QA test immediately without needing an active mail server.
 * **Production Mode (Real Inbox Delivery):** When SMTP credentials are provided in your `.env` or container environment, the API automatically sends formatted HTML emails to the user's inbox with a 5-minute security code.
-
-### 30-Second SMTP Configuration Example (`.env`)
-
-#### Option A: Gmail SMTP
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your_16_digit_gmail_app_password
-MAIL_FROM=your-email@gmail.com
-MAIL_FROM_NAME="Student Corporate Matcher Platform"
-```
-*(Generate an App Password at: Google Account > Security > 2-Step Verification > App Passwords)*
 
 #### Option B: SendGrid / Amazon SES / Brevo / Mailgun
 ```env
