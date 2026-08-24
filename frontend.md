@@ -1,59 +1,109 @@
-# Student-Corporate Matcher Platform - Complete Frontend Developer Guide
+# 💻 Student-Corporate Matcher Platform - Frontend Developer Handbook
 
-> **Architecture**: React / Vue / Next.js / Vanilla JS Single Page Application (SPA)  
-> **API Base URL**: `http://localhost:8080` (or injected `VITE_API_BASE_URL` / `NEXT_PUBLIC_API_URL`)  
-> **Auth Architecture**: OTP-based Passwordless Auth + Admin 2-Step (Password + OTP) + 28-day Refresh Token Rotation
+> **Production API Base URL**: `https://student-corporate-matcher.onrender.com/api/v1`  
+> **Local Development API Base URL**: `http://localhost:8080/api/v1`  
+> **Target Framework**: React / Vue / Next.js / Angular / Vanilla JS (SPA)  
+> **Auth Model**: Passwordless Email OTP + Admin 2-Step (Password + OTP) + 28-Day Refresh Token Rotation
 
 ---
 
-## 1. Authentication & Session State Management
+## 1. Quick Setup & Axios Interceptor
 
-### 1.1. Session Token Storage
-Store tokens securely in frontend state:
-- `accessToken`: Store in memory (or secure `sessionStorage` / cookie). Valid for 30 minutes.
-- `refreshToken`: Store in `localStorage`. Valid for **28 days** (`2,419,200,000 ms`).
-- `userRole`: `ROLE_STUDENT`, `ROLE_TEACHER`, `ROLE_COMPANY`, `ROLE_ADMIN`.
+### 1.1. Environment Configuration (`.env`)
+```bash
+# In your frontend project root
+VITE_API_BASE_URL=https://student-corporate-matcher.onrender.com/api/v1
+# Or for local development:
+# VITE_API_BASE_URL=http://localhost:8080/api/v1
+```
 
-### 1.2. Axios / Fetch Interceptor (Automatic 28-Day Refresh Rotation)
+### 1.2. Complete Axios HTTP Client with 28-Day Token Rotation
 ```typescript
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const api = axios.create({
-  baseURL: process.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
-  headers: { 'Content-Type': 'application/json' }
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://student-corporate-matcher.onrender.com/api/v1';
+
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 15000,
 });
 
-api.interceptors.request.use((config) => {
+// 1. Request Interceptor: Attach Bearer JWT
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('accessToken');
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-api.interceptors.response.use(
+// 2. Response Interceptor: Seamless 28-Day Refresh Token Rotation
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token!);
+    }
+  });
+  failedQueue = [];
+};
+
+apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+  async (error: AxiosError) => {
+    const originalRequest: any = error.config;
+
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        try {
-          const res = await axios.post('http://localhost:8080/api/v1/auth/refresh', {
-            refreshToken
-          });
-          const { accessToken, refreshToken: newRefreshToken } = res.data.data;
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          return api(originalRequest);
-        } catch (refreshErr) {
-          localStorage.clear();
-          window.location.href = '/login';
-        }
+      isRefreshing = true;
+
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+      if (!storedRefreshToken) {
+        localStorage.clear();
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+
+      try {
+        const refreshResponse = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          refreshToken: storedRefreshToken,
+        });
+
+        const { accessToken, refreshToken: newRefreshToken } = refreshResponse.data.data;
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', newRefreshToken);
+
+        processQueue(null, accessToken);
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        localStorage.clear();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
+
     return Promise.reject(error);
   }
 );
@@ -61,78 +111,173 @@ api.interceptors.response.use(
 
 ---
 
-## 2. User Flows & Screen Specifications
+## 2. Cold-Start Keep-Alive Background Worker
 
-### 2.1. Student & Company Login Flow
-1. User enters Email and selects Role (`ROLE_STUDENT` or `ROLE_COMPANY`).
-2. Call `POST /api/v1/auth/otp/send`:
-   ```json
-   { "email": "user@domain.com", "role": "ROLE_STUDENT" }
-   ```
-3. Show 6-digit OTP Input Dialog with a 60-second countdown timer.
-4. User enters OTP $\rightarrow$ call `POST /api/v1/auth/otp/verify`:
-   ```json
-   { "email": "user@domain.com", "otp": "123456" }
-   ```
-5. Save tokens and redirect to Role Dashboard (`/student/dashboard` or `/company/dashboard`).
+Render free instances spin down after 15 minutes of inactivity. Add this lightweight background pinger in your frontend entry point (e.g. `App.tsx` or `index.html`):
+
+```typescript
+// Keep-Alive Service: Pings every 4 minutes (sub-millisecond zero-DB micro-ping)
+export function startKeepAliveWorker() {
+  const pingUrl = `${API_BASE_URL}/ping`.replace('/api/v1/ping', '/api/v1/ping');
+  setInterval(async () => {
+    try {
+      await fetch(pingUrl, { method: 'GET', mode: 'cors' });
+      console.debug('[Keep-Alive] Server ping successful.');
+    } catch {
+      // Ignored
+    }
+  }, 4 * 60 * 1000);
+}
+```
 
 ---
 
-### 2.2. Teacher Self-Registration & Verification Waiting State
-1. **Teacher Registration Screen** (`/teacher/register`):
-   - Fields: Full Name, Email, Employee ID, Department, Designation, Phone Number, Assigned Subjects (tags/multi-select).
-   - Call `POST /api/v1/teachers/register`.
-   - On success (201 Created), display modal:
-     > **"Registration Submitted Successfully"**  
-     > Your faculty account has been submitted and is currently pending administrator verification. Please check back later once an administrator has approved your application.
-2. **Teacher Login Attempt** (`/teacher/login`):
-   - When teacher requests OTP via `POST /api/v1/auth/otp/send`:
-   - If the backend returns `403 Forbidden` with `"No further action, verification is in waiting"`, show a status banner:
+## 3. UI Flows & Implementation Details
+
+### 3.1. Master Admin 2-Step Login (`/admin/login`)
+
+```
++-------------------------------------------------------+
+|                 👑 MASTER ADMIN LOGIN                 |
++-------------------------------------------------------+
+| Admin Email:    [ amansingh.mothari85@gmail.com     ] |
+| Master Password:[ ••••••••••••••••••••••••••••••     ] |
+|                                                       |
+| [  Request 2-Step OTP Code  ]                         |
++-------------------------------------------------------+
+```
+
+1. **Step 1 Request**:
+   ```typescript
+   await apiClient.post('/auth/admin/otp/send', {
+     email: adminEmail,
+     password: adminPassword,
+     sendToRecoveryEmail: true // Sends to hans31144@gmail.com as backup
+   });
+   ```
+2. **Step 2 Modal**:
+   - Prompt: *"A 6-digit OTP has been sent to your admin email and backup recovery inbox."*
+   - User inputs 6 digits $\rightarrow$ call `/auth/otp/verify`:
+   ```typescript
+   const res = await apiClient.post('/auth/otp/verify', {
+     email: adminEmail,
+     otp: enteredOtp
+   });
+   // Save res.data.data.accessToken and res.data.data.refreshToken
+   // Navigate to /admin/dashboard
+   ```
+
+---
+
+### 3.2. Teacher Self-Registration & Verification Waiting State
+
+```
++-------------------------------------------------------+
+|               FACULTY SELF-REGISTRATION               |
++-------------------------------------------------------+
+| Full Name:       [ Dr. Alan Turing                  ] |
+| Email:           [ turing@faculty.edu               ] |
+| Employee ID:     [ EMP-FAC-1002                     ] |
+| Department:      [ Computer Science & Engineering   ] |
+| Designation:     [ Professor                        ] |
+| Phone Number:    [ +1987654321                      ] |
+| Assigned Subjects (Multi-Select):                     |
+|  [ Theory of Computation x ]  [ Algorithms x ]        |
+|                                                       |
+| [  Submit Faculty Registration  ]                     |
++-------------------------------------------------------+
+```
+
+1. **Registration Call**:
+   ```typescript
+   await apiClient.post('/teachers/register', formData);
+   ```
+2. **Success Feedback**:
+   - Display banner: *"Registration submitted! Your faculty account is pending administrator verification before login."*
+3. **Handling Login Attempts While Pending**:
+   - If a teacher attempts login before Admin approval, the backend returns:
+     `403 Forbidden: "No further action, verification is in waiting"`
+   - Catch this exact message in your frontend and display a clean status card:
      > ⏳ **Verification Pending**: No further action is required from you. Your verification is in waiting.
 
 ---
 
-### 2.3. Admin 2-Step Authentication Flow (`/admin/login`)
-1. **Step 1: Admin Password Screen**:
-   - Fields: Admin Email (`amansingh.mothari85@gmail.com`), Master Password.
-   - Call `POST /api/v1/auth/admin/otp/send`:
-     ```json
-     {
-       "email": "amansingh.mothari85@gmail.com",
-       "password": "Admin@RootMaster2026!",
-       "sendToRecoveryEmail": true
-     }
-     ```
-2. **Step 2: Admin OTP Verification**:
-   - Display notice: *"A 6-digit OTP has been sent to your admin email and recovery email."*
-   - Call `POST /api/v1/auth/otp/verify`.
-   - On success, redirect to Admin Console (`/admin/dashboard`).
+### 3.3. Student Portal (`/student/dashboard`)
+
+1. **Profile & Aggregate Score**:
+   - `GET /students/profile` $\rightarrow$ Render aggregate percentage badge and verified marks breakdown.
+2. **Self-Report Marks**:
+   - `POST /students/marks` $\rightarrow$ Submit semester marks. Unverified marks display a *"Verification by Teacher is Required"* badge until verified by faculty.
+3. **Matched Companies**:
+   - `GET /matches/student` $\rightarrow$ Render eligible hiring companies, direct matches, and subject gap details.
 
 ---
 
-### 2.4. Admin Dashboard & Control Panel (`/admin/dashboard`)
-1. **Summary Metrics Banner**:
-   - Total Students, Teachers, Companies, Verified Companies, Pending Marks Verifications (`GET /api/v1/admin/stats`).
-2. **Pending Teacher Applications Tab**:
-   - Call `GET /api/v1/admin/teachers/pending`.
-   - Table columns: Full Name, Email, Employee ID, Department, Assigned Subjects, Registration Date.
-   - Actions: **Approve** (`POST /api/v1/admin/teachers/{id}/approve`) and **Reject** (`POST /api/v1/admin/teachers/{id}/reject` with reason input).
-3. **Student Directory Tab**:
-   - Call `GET /api/v1/admin/students`.
-   - Actions: View Detailed Profile (`GET /api/v1/admin/students/{id}`), Delete Student (`DELETE /api/v1/admin/students/{id}`).
-4. **Company Directory Tab**:
-   - Call `GET /api/v1/admin/companies`.
-   - Actions: Verify/Reject Badge (`PATCH /api/v1/admin/companies/{id}/status`), Edit Company, Delete Company.
-5. **System Diagnostics & Low-RAM Health Tab**:
-   - Call `GET /api/v1/admin/system/diagnostics`.
-   - Render RAM Gauge (e.g. 112MB used / 256MB allocated), Daily Mail Quota Usage (e.g. 14 / 400), Server Uptime, and Active Database Stats.
+### 3.4. Teacher Portal (`/teacher/dashboard`)
+
+1. **Fetch Student by Roll Number**:
+   - `GET /teachers/students/{rollNumber}/marks`
+2. **Official Marks Verification Form**:
+   - Teacher inputs verified marks $\rightarrow$ `POST /teachers/students/{rollNumber}/marks/verify`.
+   - The verified marks instantly show a green **"Officially Verified"** badge with the faculty member's name and audit timestamp.
 
 ---
 
-### 2.5. Cold-Start Keep-Alive Background Worker (Optional)
-If hosting on free cloud platforms (Render, Fly.io, Railway), include a background keep-alive ping in your frontend application every 4 minutes:
+### 3.5. Admin Console & Real-Time Diagnostics (`/admin/dashboard`)
+
+1. **Pending Teacher Approvals Tab**:
+   - `GET /admin/teachers/pending`
+   - Actions: **Approve** (`POST /admin/teachers/{id}/approve`) or **Reject** (`POST /admin/teachers/{id}/reject` with reason modal).
+2. **Student & Company Management**:
+   - Full CRUD tables with search, edit, and delete actions.
+3. **Server Diagnostics Card**:
+   - `GET /admin/system/diagnostics`
+   - Render RAM usage bar (`usedMemoryMb / totalAllocatedMemoryMb`), daily SMTP email quota counter (`dailyDispatchesCount / 400`), and active database entity counts.
+
+---
+
+## 4. Standard Response Types (TypeScript)
+
 ```typescript
-setInterval(() => {
-  fetch('http://localhost:8080/api/v1/ping').catch(() => {});
-}, 4 * 60 * 1000);
+export interface ApiResponse<T> {
+  status: number;
+  message: string;
+  data: T;
+  timestamp: string;
+}
+
+export interface AuthResponseData {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  email: string;
+  role: 'ROLE_STUDENT' | 'ROLE_TEACHER' | 'ROLE_COMPANY' | 'ROLE_ADMIN';
+}
+
+export interface SystemDiagnosticsData {
+  serverStatus: string;
+  jvmVersion: string;
+  uptimeSeconds: number;
+  memoryUsage: {
+    usedMemoryMb: number;
+    freeMemoryMb: number;
+    totalAllocatedMemoryMb: number;
+    maxAvailableHeapMb: number;
+  };
+  databaseStats: {
+    totalUsers: number;
+    totalStudents: number;
+    totalTeachers: number;
+    totalCompanies: number;
+    pendingTeacherApprovals: number;
+  };
+  mailQuotaStats: {
+    dailyDispatchesCount: number;
+    dailyQuotaLimit: number;
+    remainingDailyQuota: number;
+  };
+  adminEmail: string;
+  adminRecoveryEmail: string;
+}
 ```

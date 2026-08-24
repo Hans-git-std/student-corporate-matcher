@@ -1,12 +1,68 @@
-# Student-Corporate Matcher Platform - System Architecture & Internal Engineering Guide
+# 🏛️ Student-Corporate Matcher Platform - System Architecture & Engineering Guide
 
-> **Enterprise Grade**: Spring Boot 3.4.2 + Java 21 LTS + TiDB Cloud (Serverless MySQL Dialect)  
-> **Security Protocol**: Zero-Trust, Master Admin 2-Step (Password + OTP), 28-Day Refresh Rotation, IDOR Protection, Faculty Approval Queue  
-> **Server Efficiency Profile**: Optimized for Low-RAM (~250MB JVM on 500MB Host) with Serial GC & Tiered C1 JIT
+> **Production Deployment**: Hosted on [Render](https://student-corporate-matcher.onrender.com)  
+> **Database Engine**: [TiDB Cloud](https://tidbcloud.com) (Serverless Distributed MySQL Dialect)  
+> **Framework Stack**: Spring Boot 3.4.2 + Java 21 LTS + Spring Security 6 + Spring Data JPA / Hibernate 6  
+> **Performance Profile**: Optimized for Low-RAM (~250MB JVM on 500MB Host) with Serial GC & C1 JIT  
 
 ---
 
-## 1. System Architecture & ER Diagram
+## 1. High-Level Architecture Overview
+
+```
+                         +-----------------------------------+
+                         |   Frontend Clients (React / Web)  |
+                         +-----------------------------------+
+                                           |
+                                  (HTTPS REST APIs)
+                                           |
+                         +-----------------------------------+
+                         |    Render Production Container    |
+                         |   (Eclipse Temurin 21 Alpine JRE) |
+                         |                                   |
+                         |   +---------------------------+   |
+                         |   |    Security Filters       |   |
+                         |   |  - RateLimitingFilter     |   |
+                         |   |  - JwtAuthenticationFilter|   |
+                         |   |  - SecurityGuard (SpEL)   |   |
+                         |   +---------------------------+   |
+                         |                 |                 |
+                         |   +---------------------------+   |
+                         |   |    REST Controllers       |   |
+                         |   |  - AuthController         |   |
+                         |   |  - PingController         |   |
+                         |   |  - StudentController      |   |
+                         |   |  - TeacherController      |   |
+                         |   |  - CompanyController      |   |
+                         |   |  - MatchingController     |   |
+                         |   |  - AdminController        |   |
+                         |   +---------------------------+   |
+                         |                 |                 |
+                         |   +---------------------------+   |
+                         |   |     Service Layer         |   |
+                         |   |  - MatchingEngineService  |   |
+                         |   |  - AuthService            |   |
+                         |   |  - AdminService           |   |
+                         |   |  - MailQuotaRateLimiter   |   |
+                         |   +---------------------------+   |
+                         |                 |                 |
+                         |   +---------------------------+   |
+                         |   |    Hikari Connection Pool |   |
+                         |   |      (Max 3 Connections)  |   |
+                         |   +---------------------------+   |
+                         +-----------------------------------+
+                                           |
+                               (TLS 1.2 Encrypted JDBC)
+                                           |
+                         +-----------------------------------+
+                         |      TiDB Cloud Database Engine   |
+                         |     (Distributed Cloud Storage)   |
+                         +-----------------------------------+
+```
+
+---
+
+## 2. Complete Entity-Relationship (ER) Model
 
 ```mermaid
 erDiagram
@@ -24,12 +80,13 @@ erDiagram
 
     COMPANY_PROFILES ||--o{ HIRING_CRITERIA : "defines criteria (1:N)"
     HIRING_CRITERIA ||--o{ CRITERIA_REQUIRED_SKILLS : "requires (1:N)"
+    HIRING_CRITERIA ||--o{ CRITERIA_SUBJECT_CUTOFFS : "sets cutoffs (1:N)"
     SKILLS ||--o{ CRITERIA_REQUIRED_SKILLS : "specified in (1:N)"
 
     USERS {
         bigint id PK
-        varchar email UK "unique, indexed"
-        varchar password_hash "BCrypt (admin/password accounts)"
+        varchar email UK "indexed"
+        varchar password_hash "BCrypt (admin)"
         varchar role "ROLE_STUDENT, ROLE_TEACHER, ROLE_COMPANY, ROLE_ADMIN"
         boolean enabled "default true"
         timestamp created_at
@@ -112,40 +169,39 @@ erDiagram
 
 ---
 
-## 2. Core Security & Lifecycle Workflows
+## 3. Core Security & Lifecycle Architecture
 
-### 2.1. Master Admin 2-Step Login & Emergency Recovery
-1. Admin initiates login at `POST /api/v1/auth/admin/otp/send` with `email` + `password`.
-2. Server validates password against BCrypt `password_hash`.
-3. Server generates 6-digit OTP and dispatches it to `amansingh.mothari85@gmail.com` and mirror security copy to `hans31144@gmail.com`.
-4. Admin submits OTP at `POST /api/v1/auth/otp/verify` to receive JWT + 28-day Refresh Token.
-5. All administrative routes (`/api/v1/admin/**`) are guarded via SpEL:
+### 3.1. Master Admin 2-Step Authentication & Recovery
+1. **Password Step**: `POST /api/v1/auth/admin/otp/send` validates the admin password using `BCryptPasswordEncoder`.
+2. **OTP Dispatch**: A 6-digit cryptographic numeric OTP is generated (5-minute TTL) and dispatched via Gmail SMTP to `amansingh.mothari85@gmail.com` and mirrored to `hans31144@gmail.com`.
+3. **Verification**: `POST /api/v1/auth/otp/verify` issues the JWT access token and 28-day refresh token.
+4. **Access Control**: All `/api/v1/admin/**` endpoints are guarded by SpEL expressions:
    `@PreAuthorize("hasRole('ADMIN') and @securityGuard.isMasterAdmin(principal)")`
 
-### 2.2. Teacher Self-Registration & Approval Lifecycle
-1. Faculty self-register at `POST /api/v1/teachers/register`.
-2. Account is provisioned with `approvalStatus = PENDING`.
-3. If teacher attempts to log in before Admin verification, `AuthService` throws:
-   `ForbiddenException("No further action, verification is in waiting")`.
-4. Admin inspects pending queue via `GET /api/v1/admin/teachers/pending`.
-5. Admin approves via `POST /api/v1/admin/teachers/{id}/approve`.
-6. Teacher can now log in and perform official mark verifications.
+### 3.2. Teacher Self-Registration & Approval Lifecycle
+1. **Registration**: Teachers register via `POST /api/v1/teachers/register` (`approvalStatus = PENDING`).
+2. **Pending Guard**: If an unapproved teacher tries to request an OTP, `AuthService` rejects with `403 Forbidden`:  
+   `"No further action, verification is in waiting"`.
+3. **Admin Queue**: Admin reviews pending registrations at `GET /api/v1/admin/teachers/pending` and approves with `POST /api/v1/admin/teachers/{id}/approve`.
 
-### 2.3. Anti-Flood Mail Quota Limiter
-- **Daily Quota**: 400 emails/day, resetting at 00:00 UTC.
-- **Per-Email Anti-Flood**: 60-second cooldown between resend requests.
+### 3.3. Long-Lived 28-Day Refresh Token Rotation
+- Refresh tokens are hashed via SHA-256 in the database.
+- Lifespan: **28 days** (`2,419,200,000 ms`).
+- On each refresh call, the old token is permanently revoked, and a brand-new token pair is issued.
+
+### 3.4. Anti-Abuse Mail Quota & Rate Limiting
+- **Daily Quota**: 400 emails/day, auto-resetting at 00:00 UTC.
+- **Cooldown**: 60-second anti-flood delay between OTP resends for any given email address.
 
 ---
 
-## 3. Low-RAM Deployment Configuration (500MB Host Target)
+## 4. Low-RAM Deployment Optimization (500MB Host Target)
 
-### JVM Tuning
-- **Garbage Collector**: `-XX:+UseSerialGC` (Eliminates parallel GC worker thread stacks, saving ~60MB).
-- **Heap Limits**: `-Xms96m -Xmx256m` (Caps JVM heap at 256MB).
-- **Metaspace Limit**: `-XX:MaxMetaspaceSize=128m`.
-- **JIT Compilation**: `-XX:+TieredCompilation -XX:TieredStopAtLevel=1` (C1 JIT only; fast startup in <3s, saving ~60MB code cache).
-- **Database Connection Pool**: HikariCP `maximum-pool-size=3` and `minimum-idle=1`.
+To prevent OutOfMemory (OOM) errors and optimize costs on cloud free-tier servers:
 
-### Micro Ping Keep-Alive
-- Endpoint: `GET /api/v1/ping` or `GET /ping`
-- Characteristics: Zero database queries, zero security filter overhead, instant sub-millisecond response for external ping services (e.g. UptimeRobot, cron jobs) to prevent cloud cold starts.
+1. **Alpine Linux Base**: `eclipse-temurin:21-jre-alpine` (~80MB OS footprint).
+2. **Serial Garbage Collector**: `-XX:+UseSerialGC` disables parallel GC worker thread stacks, saving ~60MB RAM.
+3. **Lightweight JIT (Tier 1 C1)**: `-XX:TieredCompilation -XX:TieredStopAtLevel=1` skips memory-intensive C2 optimization, cutting code cache footprint and enabling startup in <3 seconds.
+4. **Capped Heap & Metaspace**: `-Xms96m -Xmx256m -XX:MaxMetaspaceSize=128m`.
+5. **HikariCP Connection Pool**: `maximum-pool-size=3` and `minimum-idle=1`.
+6. **Micro-Ping Service**: `GET /api/v1/ping` responds in <1ms without hitting the database to keep cloud containers awake.
