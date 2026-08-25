@@ -21,6 +21,7 @@ import com.matcher.platform.repository.TeacherProfileRepository;
 import com.matcher.platform.repository.TeacherSubjectRepository;
 import com.matcher.platform.repository.UserRepository;
 import com.matcher.platform.security.XssSanitizer;
+import com.matcher.platform.util.StringNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,7 +85,8 @@ public class TeacherService {
             List<TeacherSubject> subjects = new ArrayList<>();
             for (String sub : request.getAssignedSubjects()) {
                 if (sub != null && !sub.trim().isEmpty()) {
-                    subjects.add(new TeacherSubject(savedProfile, XssSanitizer.sanitize(sub.trim())));
+                    String normSub = StringNormalizer.normalize(sub);
+                    subjects.add(new TeacherSubject(savedProfile, XssSanitizer.sanitize(normSub)));
                 }
             }
             teacherSubjectRepository.saveAll(subjects);
@@ -135,7 +137,8 @@ public class TeacherService {
             List<TeacherSubject> subjects = new ArrayList<>();
             for (String sub : request.getAssignedSubjects()) {
                 if (sub != null && !sub.trim().isEmpty()) {
-                    subjects.add(new TeacherSubject(saved, sub.trim()));
+                    String normSub = StringNormalizer.normalize(sub);
+                    subjects.add(new TeacherSubject(saved, normSub));
                 }
             }
             teacherSubjectRepository.saveAll(subjects);
@@ -155,7 +158,8 @@ public class TeacherService {
     }
 
     public List<SubjectMarkResponse> verifyStudentMarks(String teacherEmail, String rollNumber, VerifyMarksRequest request) {
-        TeacherProfile teacher = teacherProfileRepository.findByUserEmail(teacherEmail)
+        TeacherProfile teacher = teacherProfileRepository.findWithSubjectsByEmail(teacherEmail)
+                .or(() -> teacherProfileRepository.findByUserEmail(teacherEmail))
                 .orElseThrow(() -> new ResourceNotFoundException("TeacherProfile", "email", teacherEmail));
 
         if (teacher.getApprovalStatus() != ApprovalStatus.APPROVED) {
@@ -165,10 +169,36 @@ public class TeacherService {
         StudentProfile student = studentProfileRepository.findByRollNumber(rollNumber.trim())
                 .orElseThrow(() -> new ResourceNotFoundException("Student", "rollNumber", rollNumber));
 
+        List<TeacherSubject> assignedSubjects = teacher.getAssignedSubjects();
+        boolean hasSubjectRestrictions = assignedSubjects != null && !assignedSubjects.isEmpty();
+
         List<SubjectMarkResponse> results = new ArrayList<>();
+        List<StudentAcademicRecord> existingStudentRecords = academicRecordRepository.findByStudentId(student.getId());
+
         for (TeacherMarkVerificationEntry entry : request.getVerifiedMarks()) {
-            Optional<StudentAcademicRecord> existingOpt =
-                    academicRecordRepository.findByStudentIdAndSubjectNameIgnoreCase(student.getId(), entry.getSubjectName().trim());
+            String rawSubject = entry.getSubjectName();
+            String normalizedSubject = StringNormalizer.normalize(rawSubject);
+
+            // Safety guard: Enforce teacher subject verification authority if assigned subjects exist
+            if (hasSubjectRestrictions) {
+                boolean isAuthorized = assignedSubjects.stream().anyMatch(as ->
+                        StringNormalizer.isFuzzyMatch(as.getSubjectName(), normalizedSubject));
+
+                if (!isAuthorized) {
+                    List<String> authorizedNames = assignedSubjects.stream().map(TeacherSubject::getSubjectName).toList();
+                    throw new BadRequestException(String.format(
+                            "Faculty member '%s' is not authorized to verify marks for subject '%s'. Authorized assigned subjects: %s",
+                            teacher.getFullName(), rawSubject, authorizedNames));
+                }
+            }
+
+            // Find existing record: exact ignore-case lookup first, then fuzzy match to avoid duplicates on minor typos
+            Optional<StudentAcademicRecord> existingOpt = existingStudentRecords.stream()
+                    .filter(r -> r.getSubjectName().equalsIgnoreCase(normalizedSubject))
+                    .findFirst()
+                    .or(() -> existingStudentRecords.stream()
+                            .filter(r -> StringNormalizer.isFuzzyMatch(r.getSubjectName(), normalizedSubject))
+                            .findFirst());
 
             StudentAcademicRecord record;
             if (existingOpt.isPresent()) {
@@ -177,16 +207,16 @@ public class TeacherService {
                 record.setIsVerified(true);
                 record.setVerifiedByTeacher(teacher);
                 record.setVerifiedAt(Instant.now());
-                if (entry.getSemester() != null) record.setSemester(entry.getSemester());
+                if (entry.getSemester() != null) record.setSemester(StringNormalizer.normalize(entry.getSemester()));
                 if (entry.getRemarks() != null) record.setRemarks(entry.getRemarks());
             } else {
                 record = StudentAcademicRecord.builder()
                         .student(student)
-                        .subjectName(entry.getSubjectName().trim())
+                        .subjectName(normalizedSubject)
                         .selfReportedMarks(entry.getVerifiedMarks())
                         .verifiedMarks(entry.getVerifiedMarks())
                         .isVerified(true)
-                        .semester(entry.getSemester())
+                        .semester(entry.getSemester() != null ? StringNormalizer.normalize(entry.getSemester()) : null)
                         .verifiedByTeacher(teacher)
                         .verifiedAt(Instant.now())
                         .remarks(entry.getRemarks())

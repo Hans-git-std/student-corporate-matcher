@@ -21,6 +21,8 @@ import com.matcher.platform.repository.StudentAcademicRecordRepository;
 import com.matcher.platform.repository.StudentProfileRepository;
 import com.matcher.platform.repository.StudentSkillRepository;
 import com.matcher.platform.repository.UserRepository;
+import com.matcher.platform.security.XssSanitizer;
+import com.matcher.platform.util.StringNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,23 +101,35 @@ public class StudentService {
         StudentProfile profile = studentProfileRepository.findByUserEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
 
+        List<StudentAcademicRecord> existingRecords = academicRecordRepository.findByStudentId(profile.getId());
         List<SubjectMarkResponse> results = new ArrayList<>();
+
         for (SubjectMarkEntry entry : request.getMarks()) {
-            Optional<StudentAcademicRecord> existingRecordOpt =
-                    academicRecordRepository.findByStudentIdAndSubjectNameIgnoreCase(profile.getId(), entry.getSubjectName().trim());
+            String normalizedSubject = StringNormalizer.normalize(entry.getSubjectName());
+            String normalizedSemester = StringNormalizer.normalize(entry.getSemester());
+
+            // Match existing record using exact ignore-case first, then fuzzy match to avoid duplicate marks
+            Optional<StudentAcademicRecord> existingRecordOpt = existingRecords.stream()
+                    .filter(r -> r.getSubjectName().equalsIgnoreCase(normalizedSubject))
+                    .findFirst()
+                    .or(() -> existingRecords.stream()
+                            .filter(r -> StringNormalizer.isFuzzyMatch(r.getSubjectName(), normalizedSubject))
+                            .findFirst());
 
             StudentAcademicRecord record;
             if (existingRecordOpt.isPresent()) {
                 record = existingRecordOpt.get();
                 record.setSelfReportedMarks(entry.getMarksObtained());
-                record.setSemester(entry.getSemester());
+                if (normalizedSemester != null) {
+                    record.setSemester(normalizedSemester);
+                }
             } else {
                 record = StudentAcademicRecord.builder()
                         .student(profile)
-                        .subjectName(entry.getSubjectName().trim())
+                        .subjectName(normalizedSubject)
                         .selfReportedMarks(entry.getMarksObtained())
                         .isVerified(false)
-                        .semester(entry.getSemester())
+                        .semester(normalizedSemester)
                         .build();
             }
             StudentAcademicRecord saved = academicRecordRepository.save(record);
@@ -137,11 +151,15 @@ public class StudentService {
         StudentProfile profile = studentProfileRepository.findByUserEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
 
-        String normalizedSkillName = request.getSkillName().trim();
+        String normalizedSkillName = StringNormalizer.normalize(request.getSkillName());
         Skill skill = skillRepository.findByNameIgnoreCase(normalizedSkillName)
                 .orElseGet(() -> skillRepository.save(new Skill(normalizedSkillName)));
 
-        Optional<StudentSkill> existingOpt = studentSkillRepository.findByStudentIdAndSkillName(profile.getId(), normalizedSkillName);
+        List<StudentSkill> currentSkills = studentSkillRepository.findByStudentId(profile.getId());
+        Optional<StudentSkill> existingOpt = currentSkills.stream()
+                .filter(ss -> ss.getSkill() != null && StringNormalizer.isFuzzyMatch(ss.getSkill().getName(), normalizedSkillName))
+                .findFirst();
+
         if (existingOpt.isPresent()) {
             StudentSkill existing = existingOpt.get();
             existing.setProficiency(request.getProficiency());
@@ -156,7 +174,14 @@ public class StudentService {
     public void deleteSkill(String email, String skillName) {
         StudentProfile profile = studentProfileRepository.findByUserEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
-        studentSkillRepository.deleteByStudentIdAndSkillName(profile.getId(), skillName.trim());
+        String normalizedSkillName = StringNormalizer.normalize(skillName);
+
+        List<StudentSkill> currentSkills = studentSkillRepository.findByStudentId(profile.getId());
+        Optional<StudentSkill> matched = currentSkills.stream()
+                .filter(ss -> ss.getSkill() != null && StringNormalizer.isFuzzyMatch(ss.getSkill().getName(), normalizedSkillName))
+                .findFirst();
+
+        matched.ifPresent(studentSkillRepository::delete);
     }
 
     public StudentProfileResponse mapToProfileResponse(StudentProfile profile) {

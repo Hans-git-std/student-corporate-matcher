@@ -8,6 +8,7 @@ import com.matcher.platform.entity.enums.MatchType;
 import com.matcher.platform.entity.enums.SkillProficiency;
 import com.matcher.platform.repository.HiringCriteriaRepository;
 import com.matcher.platform.repository.StudentProfileRepository;
+import com.matcher.platform.util.StringNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,14 +40,14 @@ public class MatchingEngineService {
             return Collections.emptyList();
         }
 
-        // Extract student marks map (lowercase subject -> record)
-        Map<String, StudentAcademicRecord> studentMarksMap = new HashMap<>();
+        List<StudentAcademicRecord> academicRecords = student.getAcademicRecords() != null ? student.getAcademicRecords() : Collections.emptyList();
+        List<StudentSkill> studentSkills = student.getSkills() != null ? student.getSkills() : Collections.emptyList();
+
         double totalMarks = 0.0;
         int subjectCount = 0;
         boolean hasUnverifiedMarks = false;
 
-        for (StudentAcademicRecord record : student.getAcademicRecords()) {
-            studentMarksMap.put(record.getSubjectName().trim().toLowerCase(), record);
+        for (StudentAcademicRecord record : academicRecords) {
             totalMarks += record.getEffectiveMark();
             subjectCount++;
             if (!Boolean.TRUE.equals(record.getIsVerified())) {
@@ -55,20 +56,12 @@ public class MatchingEngineService {
         }
         double studentAggregate = subjectCount > 0 ? (totalMarks / subjectCount) : 0.0;
 
-        // Extract student skills map (lowercase name -> proficiency)
-        Map<String, SkillProficiency> studentSkillsMap = new HashMap<>();
-        for (StudentSkill ss : student.getSkills()) {
-            if (ss.getSkill() != null && ss.getSkill().getName() != null) {
-                studentSkillsMap.put(ss.getSkill().getName().trim().toLowerCase(), ss.getProficiency());
-            }
-        }
-
         List<CompanyMatchResponse> strictMatches = new ArrayList<>();
         List<CompanyMatchResponse> candidateRelaxedMatches = new ArrayList<>();
 
         for (HiringCriteria criteria : allActiveCriteria) {
             CompanyProfile company = criteria.getCompany();
-            EvaluationResult eval = evaluateCriteria(criteria, studentMarksMap, studentSkillsMap, studentAggregate, hasUnverifiedMarks);
+            EvaluationResult eval = evaluateCriteria(criteria, academicRecords, studentSkills, studentAggregate, hasUnverifiedMarks);
 
             CompanyMatchResponse matchResponse = CompanyMatchResponse.builder()
                     .companyId(company.getId())
@@ -117,8 +110,8 @@ public class MatchingEngineService {
 
     private EvaluationResult evaluateCriteria(
             HiringCriteria criteria,
-            Map<String, StudentAcademicRecord> studentMarks,
-            Map<String, SkillProficiency> studentSkills,
+            List<StudentAcademicRecord> studentMarks,
+            List<StudentSkill> studentSkills,
             double studentAggregate,
             boolean globalUnverified
     ) {
@@ -131,26 +124,30 @@ public class MatchingEngineService {
         double totalSkillWeight = 0.0;
         double matchedSkillWeight = 0.0;
 
-        // 1. Evaluate Skills
+        // 1. Evaluate Skills (Typo-Tolerant & Canonical Matching)
         if (criteria.getRequiredSkills() != null && !criteria.getRequiredSkills().isEmpty()) {
             for (CriteriaRequiredSkill reqSkill : criteria.getRequiredSkills()) {
-                String skillName = reqSkill.getSkill().getName().trim().toLowerCase();
+                String reqSkillName = reqSkill.getSkill() != null ? reqSkill.getSkill().getName() : "";
                 double weight = reqSkill.getWeightage() != null ? reqSkill.getWeightage() : 1.0;
                 totalSkillWeight += weight;
 
-                if (studentSkills.containsKey(skillName)) {
-                    SkillProficiency studentProf = studentSkills.get(skillName);
-                    if (isProficiencySufficient(studentProf, reqSkill.getMinProficiency())) {
-                        matchedSkills.add(reqSkill.getSkill().getName());
+                Optional<StudentSkill> matchedStudentSkill = studentSkills.stream()
+                        .filter(ss -> ss.getSkill() != null && StringNormalizer.isFuzzyMatch(ss.getSkill().getName(), reqSkillName))
+                        .findFirst();
+
+                if (matchedStudentSkill.isPresent()) {
+                    StudentSkill ss = matchedStudentSkill.get();
+                    if (isProficiencySufficient(ss.getProficiency(), reqSkill.getMinProficiency())) {
+                        matchedSkills.add(reqSkillName);
                         matchedSkillWeight += weight;
                     } else {
-                        missingSkills.add(reqSkill.getSkill().getName() + " (Requires " + reqSkill.getMinProficiency() + ")");
+                        missingSkills.add(reqSkillName + " (Requires " + reqSkill.getMinProficiency() + ")");
                         if (Boolean.TRUE.equals(reqSkill.getIsMandatory())) {
                             isStrictMatch = false;
                         }
                     }
                 } else {
-                    missingSkills.add(reqSkill.getSkill().getName());
+                    missingSkills.add(reqSkillName);
                     if (Boolean.TRUE.equals(reqSkill.getIsMandatory())) {
                         isStrictMatch = false;
                     }
@@ -160,18 +157,22 @@ public class MatchingEngineService {
 
         double skillScorePercent = totalSkillWeight > 0 ? (matchedSkillWeight / totalSkillWeight) * 100.0 : 100.0;
 
-        // 2. Evaluate Subject Cutoffs
+        // 2. Evaluate Subject Cutoffs (Typo-Tolerant & Canonical Matching)
         double totalAcademicRatio = 0.0;
         int cutoffCount = 0;
 
         if (criteria.getSubjectCutoffs() != null && !criteria.getSubjectCutoffs().isEmpty()) {
             for (CriteriaSubjectCutoff cutoff : criteria.getSubjectCutoffs()) {
                 cutoffCount++;
-                String subNameLower = cutoff.getSubjectName().trim().toLowerCase();
+                String cutoffSubjectName = cutoff.getSubjectName();
                 double requiredScore = cutoff.getMinMarksCutoff() != null ? cutoff.getMinMarksCutoff() : 0.0;
 
-                if (studentMarks.containsKey(subNameLower)) {
-                    StudentAcademicRecord record = studentMarks.get(subNameLower);
+                Optional<StudentAcademicRecord> matchedRecord = studentMarks.stream()
+                        .filter(r -> r.getSubjectName() != null && StringNormalizer.isFuzzyMatch(r.getSubjectName(), cutoffSubjectName))
+                        .findFirst();
+
+                if (matchedRecord.isPresent()) {
+                    StudentAcademicRecord record = matchedRecord.get();
                     double actualScore = record.getEffectiveMark();
                     if (!Boolean.TRUE.equals(record.getIsVerified())) {
                         criteriaPendingVerification = true;

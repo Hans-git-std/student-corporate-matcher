@@ -9,6 +9,7 @@ import com.matcher.platform.exception.BadRequestException;
 import com.matcher.platform.exception.ResourceNotFoundException;
 import com.matcher.platform.security.XssSanitizer;
 import com.matcher.platform.repository.*;
+import com.matcher.platform.util.StringNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -125,7 +126,7 @@ public class CompanyService {
         List<CriteriaRequiredSkill> requiredSkills = new ArrayList<>();
         if (request.getRequiredSkills() != null) {
             for (RequiredSkillEntry skillEntry : request.getRequiredSkills()) {
-                String skillName = skillEntry.getSkillName().trim();
+                String skillName = StringNormalizer.normalize(skillEntry.getSkillName());
                 Skill skill = skillRepository.findByNameIgnoreCase(skillName)
                         .orElseGet(() -> skillRepository.save(new Skill(skillName)));
 
@@ -145,9 +146,10 @@ public class CompanyService {
         List<CriteriaSubjectCutoff> subjectCutoffs = new ArrayList<>();
         if (request.getSubjectCutoffs() != null) {
             for (SubjectCutoffEntry cutoffEntry : request.getSubjectCutoffs()) {
+                String subjectName = StringNormalizer.normalize(cutoffEntry.getSubjectName());
                 subjectCutoffs.add(new CriteriaSubjectCutoff(
                         savedCriteria,
-                        cutoffEntry.getSubjectName().trim(),
+                        subjectName,
                         cutoffEntry.getMinMarksCutoff(),
                         cutoffEntry.getIsMandatory()
                 ));

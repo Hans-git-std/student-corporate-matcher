@@ -140,4 +140,72 @@ class MatchingEngineServiceTest {
         assertThat(relaxedMatch.getAcademicGapSummary()).contains("A 10.0 score more is required in Data Structures & Algorithms");
         assertThat(relaxedMatch.getVerificationRemark()).isEqualTo("Verification by Teacher is Required");
     }
+
+    @Test
+    @DisplayName("Should match skills and subjects successfully even with minor typos, spacing, or canonical differences")
+    void testTypoAndSpacingToleranceInMatching() {
+        User studentUser = new User("mechanical.student@university.edu", RoleType.ROLE_STUDENT);
+        StudentProfile mechStudent = StudentProfile.builder()
+                .id(2L)
+                .user(studentUser)
+                .fullName("Taylor Smith")
+                .rollNumber("ME-2026-042")
+                .academicRecords(new ArrayList<>())
+                .skills(new ArrayList<>())
+                .build();
+
+        // Student has skill typo "Spirng Boot" and "IC Engin"
+        Skill springBoot = new Skill(3L, "Spirng Boot", "Framework");
+        Skill icEngine = new Skill(4L, "IC Engin", "Mechanical");
+        mechStudent.getSkills().add(new StudentSkill(mechStudent, springBoot, SkillProficiency.EXPERT, 3.0));
+        mechStudent.getSkills().add(new StudentSkill(mechStudent, icEngine, SkillProficiency.ADVANCED, 2.0));
+
+        // Student has subject marks with extra spaces: "  Thermodynamics  "
+        mechStudent.getAcademicRecords().add(StudentAcademicRecord.builder()
+                .student(mechStudent)
+                .subjectName("  Thermodynamics  ")
+                .selfReportedMarks(88.0)
+                .verifiedMarks(88.0)
+                .isVerified(true)
+                .build());
+
+        // Company requires "Spring Boot", "IC Engine", and cutoff in "Thermodynamics"
+        Skill requiredSpring = new Skill(10L, "Spring Boot", "Framework");
+        Skill requiredIc = new Skill(11L, "IC Engine", "Mechanical");
+
+        CompanyProfile company = CompanyProfile.builder()
+                .id(201L)
+                .companyName("AutoTech Dynamics")
+                .verificationStatus(CompanyVerificationStatus.VERIFIED)
+                .build();
+
+        HiringCriteria criteria = HiringCriteria.builder()
+                .id(5L)
+                .company(company)
+                .roleTitle("Automotive Systems Engineer")
+                .minOverallPercentage(60.0)
+                .isActive(true)
+                .requiredSkills(List.of(
+                        new CriteriaRequiredSkill(1L, null, requiredSpring, SkillProficiency.INTERMEDIATE, true, 1.0),
+                        new CriteriaRequiredSkill(2L, null, requiredIc, SkillProficiency.INTERMEDIATE, true, 1.0)
+                ))
+                .subjectCutoffs(List.of(
+                        new CriteriaSubjectCutoff(1L, null, "Thermodynamics", 75.0, true)
+                ))
+                .build();
+
+        when(studentProfileRepository.findWithDetailsByEmail("mechanical.student@university.edu"))
+                .thenReturn(Optional.of(mechStudent));
+        when(hiringCriteriaRepository.findAllActiveWithDetails())
+                .thenReturn(List.of(criteria));
+
+        List<CompanyMatchResponse> matches = matchingEngineService.calculateMatchesForStudent("mechanical.student@university.edu");
+
+        assertThat(matches).hasSize(1);
+        CompanyMatchResponse match = matches.get(0);
+        assertThat(match.getMatchType()).isEqualTo(MatchType.STRICT);
+        assertThat(match.getMatchScore()).isEqualTo(100.0);
+        assertThat(match.getMatchedSkills()).containsExactlyInAnyOrder("Spring Boot", "IC Engine");
+        assertThat(match.getMissingSkills()).isEmpty();
+    }
 }

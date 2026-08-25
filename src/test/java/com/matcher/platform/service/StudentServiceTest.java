@@ -104,7 +104,7 @@ class StudentServiceTest {
                 .build();
 
         when(studentProfileRepository.findByUserEmail("student@university.edu")).thenReturn(Optional.of(profile));
-        when(academicRecordRepository.findByStudentIdAndSubjectNameIgnoreCase(1L, "Mathematics")).thenReturn(Optional.empty());
+        when(academicRecordRepository.findByStudentId(1L)).thenReturn(List.of());
         when(academicRecordRepository.save(any(StudentAcademicRecord.class))).thenReturn(savedRecord);
 
         List<SubjectMarkResponse> marks = studentService.selfReportMarks("student@university.edu", request);

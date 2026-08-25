@@ -29,6 +29,7 @@ import com.matcher.platform.repository.TeacherProfileRepository;
 import com.matcher.platform.repository.TeacherSubjectRepository;
 import com.matcher.platform.repository.UserRepository;
 import com.matcher.platform.security.MailQuotaAndRateLimiter;
+import com.matcher.platform.util.StringNormalizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -158,7 +159,8 @@ public class AdminService {
             List<TeacherSubject> subjects = new ArrayList<>();
             for (String sub : request.getAssignedSubjects()) {
                 if (sub != null && !sub.trim().isEmpty()) {
-                    subjects.add(new TeacherSubject(savedTeacher, sub.trim()));
+                    String normSub = StringNormalizer.normalize(sub);
+                    subjects.add(new TeacherSubject(savedTeacher, normSub));
                 }
             }
             teacherSubjectRepository.saveAll(subjects);
