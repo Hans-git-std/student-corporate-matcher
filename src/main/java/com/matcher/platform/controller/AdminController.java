@@ -129,6 +129,13 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(companies, "All companies retrieved successfully"));
     }
 
+    @GetMapping("/companies/pending")
+    @Operation(summary = "List Pending Companies (Admin)", description = "Fetches all companies with NOT_VERIFIED status.")
+    public ResponseEntity<ApiResponse<List<CompanyProfileResponse>>> getPendingCompanies() {
+        List<CompanyProfileResponse> companies = adminService.getPendingCompanies();
+        return ResponseEntity.ok(ApiResponse.success(companies, "Pending companies retrieved successfully"));
+    }
+
     @GetMapping("/companies/{id}")
     @Operation(summary = "Get Company by ID (Admin)", description = "Fetches details of a specific company.")
     public ResponseEntity<ApiResponse<CompanyProfileResponse>> getCompanyById(@PathVariable Long id) {

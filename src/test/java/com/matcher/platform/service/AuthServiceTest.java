@@ -5,10 +5,12 @@ import com.matcher.platform.dto.request.OtpVerifyRequest;
 import com.matcher.platform.dto.request.TokenRefreshRequest;
 import com.matcher.platform.dto.response.AuthResponse;
 import com.matcher.platform.entity.RefreshToken;
+import com.matcher.platform.entity.StudentProfile;
 import com.matcher.platform.entity.User;
 import com.matcher.platform.entity.enums.RoleType;
 import com.matcher.platform.exception.ForbiddenException;
 import com.matcher.platform.repository.RefreshTokenRepository;
+import com.matcher.platform.repository.StudentProfileRepository;
 import com.matcher.platform.repository.TeacherProfileRepository;
 import com.matcher.platform.repository.UserRepository;
 import com.matcher.platform.security.JwtService;
@@ -44,6 +46,9 @@ class AuthServiceTest {
 
     @Mock
     private TeacherProfileRepository teacherProfileRepository;
+
+    @Mock
+    private StudentProfileRepository studentProfileRepository;
 
     @Mock
     private OtpService otpService;
@@ -101,12 +106,13 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Should verify OTP and return valid AuthResponse with access token and 28-day refresh token")
+    @DisplayName("Should verify OTP and return valid AuthResponse with access token, 28-day refresh token, and auto-provision StudentProfile")
     void testVerifyOtp() {
         OtpVerifyRequest request = new OtpVerifyRequest("student@university.edu", "123456");
 
         when(otpService.verifyOtp("student@university.edu", "123456")).thenReturn(true);
         when(userRepository.findByEmail("student@university.edu")).thenReturn(Optional.of(user));
+        when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
         when(jwtService.generateAccessToken("student@university.edu", RoleType.ROLE_STUDENT))
                 .thenReturn("mock-access-token");
         when(jwtService.getAccessTokenExpirationMs()).thenReturn(900000L);
@@ -117,6 +123,7 @@ class AuthServiceTest {
         assertThat(response.getRefreshToken()).isNotBlank();
         assertThat(response.getEmail()).isEqualTo("student@university.edu");
         assertThat(response.getRole()).isEqualTo(RoleType.ROLE_STUDENT);
+        verify(studentProfileRepository).save(any(StudentProfile.class));
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 

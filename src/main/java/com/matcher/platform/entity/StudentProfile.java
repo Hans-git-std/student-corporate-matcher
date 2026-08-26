@@ -22,10 +22,10 @@ public class StudentProfile {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "roll_number", nullable = false, unique = true, length = 30)
+    @Column(name = "roll_number", unique = true, length = 30)
     private String rollNumber;
 
-    @Column(name = "full_name", nullable = false, length = 100)
+    @Column(name = "full_name", length = 100)
     private String fullName;
 
     @Column(name = "phone_number", length = 20)

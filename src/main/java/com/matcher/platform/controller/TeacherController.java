@@ -63,6 +63,16 @@ public class TeacherController {
         return ResponseEntity.ok(ApiResponse.success(response, "Teacher profile updated successfully"));
     }
 
+    @GetMapping("/pending-verifications")
+    @PreAuthorize("hasRole('TEACHER') and @securityGuard.isValidTeacher(principal)")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "Get Pending Student Verifications", description = "Retrieves a list of students with unverified marks matching teacher assigned subjects.")
+    public ResponseEntity<ApiResponse<List<com.matcher.platform.dto.response.PendingVerificationStudentResponse>>> getPendingVerifications(Principal principal) {
+        String email = getEmail(principal);
+        List<com.matcher.platform.dto.response.PendingVerificationStudentResponse> response = teacherService.getPendingStudentVerifications(email);
+        return ResponseEntity.ok(ApiResponse.success(response, "Pending student verifications retrieved successfully"));
+    }
+
     @GetMapping("/students/{rollNumber}/marks")
     @PreAuthorize("hasRole('TEACHER') and @securityGuard.isValidTeacher(principal)")
     @SecurityRequirement(name = "BearerAuth")

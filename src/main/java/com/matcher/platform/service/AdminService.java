@@ -220,6 +220,14 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
+    public List<CompanyProfileResponse> getPendingCompanies() {
+        return companyProfileRepository.findByVerificationStatus(CompanyVerificationStatus.NOT_VERIFIED)
+                .stream()
+                .map(this::mapToCompanyResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public CompanyProfileResponse getCompanyById(Long id) {
         CompanyProfile company = companyProfileRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("CompanyProfile", "id", id));

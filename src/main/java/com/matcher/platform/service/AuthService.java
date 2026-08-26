@@ -6,6 +6,7 @@ import com.matcher.platform.dto.request.OtpVerifyRequest;
 import com.matcher.platform.dto.request.TokenRefreshRequest;
 import com.matcher.platform.dto.response.AuthResponse;
 import com.matcher.platform.entity.RefreshToken;
+import com.matcher.platform.entity.StudentProfile;
 import com.matcher.platform.entity.TeacherProfile;
 import com.matcher.platform.entity.User;
 import com.matcher.platform.entity.enums.ApprovalStatus;
@@ -15,6 +16,7 @@ import com.matcher.platform.exception.ForbiddenException;
 import com.matcher.platform.exception.ResourceNotFoundException;
 import com.matcher.platform.exception.UnauthorizedException;
 import com.matcher.platform.repository.RefreshTokenRepository;
+import com.matcher.platform.repository.StudentProfileRepository;
 import com.matcher.platform.repository.TeacherProfileRepository;
 import com.matcher.platform.repository.UserRepository;
 import com.matcher.platform.security.EmailService;
@@ -46,6 +48,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeacherProfileRepository teacherProfileRepository;
+    private final StudentProfileRepository studentProfileRepository;
     private final OtpService otpService;
     private final JwtService jwtService;
     private final EmailService emailService;
@@ -65,6 +68,7 @@ public class AuthService {
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
             TeacherProfileRepository teacherProfileRepository,
+            StudentProfileRepository studentProfileRepository,
             OtpService otpService,
             JwtService jwtService,
             EmailService emailService,
@@ -74,6 +78,7 @@ public class AuthService {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.teacherProfileRepository = teacherProfileRepository;
+        this.studentProfileRepository = studentProfileRepository;
         this.otpService = otpService;
         this.jwtService = jwtService;
         this.emailService = emailService;
@@ -178,10 +183,19 @@ public class AuthService {
             }
         }
 
-        // 4. Generate JWT Access Token
+        // 4. Auto-provision StudentProfile baseline record if not already present
+        if (user.getRole() == RoleType.ROLE_STUDENT) {
+            if (studentProfileRepository.findByUserId(user.getId()).isEmpty()) {
+                StudentProfile studentProfile = new StudentProfile();
+                studentProfile.setUser(user);
+                studentProfileRepository.save(studentProfile);
+            }
+        }
+
+        // 5. Generate JWT Access Token
         String accessToken = jwtService.generateAccessToken(user.getEmail(), user.getRole());
 
-        // 5. Generate & Save Refresh Token (28 Days long-lived lifespan)
+        // 6. Generate & Save Refresh Token (28 Days long-lived lifespan)
         String rawRefreshToken = UUID.randomUUID().toString();
         String tokenHash = hashToken(rawRefreshToken);
         Instant expiresAt = Instant.now().plus(refreshTokenExpirationMs, ChronoUnit.MILLIS);

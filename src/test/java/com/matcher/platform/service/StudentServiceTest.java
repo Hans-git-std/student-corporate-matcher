@@ -88,6 +88,31 @@ class StudentServiceTest {
     }
 
     @Test
+    @DisplayName("Should normalize lowercase roll number to uppercase and handle empty phone number cleanly")
+    void testUpdateProfileWithLowercaseRollNumberAndEmptyPhone() {
+        StudentProfile baselineProfile = new StudentProfile();
+        baselineProfile.setUser(user);
+
+        StudentProfileRequest request = StudentProfileRequest.builder()
+                .fullName("Jordan Lee")
+                .rollNumber("me-2026-102")
+                .phoneNumber("")
+                .gender("Male")
+                .build();
+
+        when(userRepository.findByEmail("student@university.edu")).thenReturn(Optional.of(user));
+        when(studentProfileRepository.findByUserEmail("student@university.edu")).thenReturn(Optional.of(baselineProfile));
+        when(studentProfileRepository.existsByRollNumber("ME-2026-102")).thenReturn(false);
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        StudentProfileResponse response = studentService.updateOrCreateProfile("student@university.edu", request);
+
+        assertThat(response.getFullName()).isEqualTo("Jordan Lee");
+        assertThat(response.getRollNumber()).isEqualTo("ME-2026-102");
+        assertThat(response.getPhoneNumber()).isNull();
+    }
+
+    @Test
     @DisplayName("Should self report subject marks with unverified state")
     void testSelfReportMarks() {
         SelfReportMarksRequest request = SelfReportMarksRequest.builder()

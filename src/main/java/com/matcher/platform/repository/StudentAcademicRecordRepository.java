@@ -19,5 +19,7 @@ public interface StudentAcademicRecordRepository extends JpaRepository<StudentAc
 
     Optional<StudentAcademicRecord> findByStudentIdAndSubjectNameIgnoreCase(Long studentId, String subjectName);
 
+    List<StudentAcademicRecord> findByIsVerifiedFalse();
+
     long countByIsVerifiedFalse();
 }

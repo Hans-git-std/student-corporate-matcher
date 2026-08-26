@@ -14,37 +14,22 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
 
     Optional<StudentProfile> findByUserId(Long userId);
 
-    @Query("SELECT sp FROM StudentProfile sp JOIN sp.user u WHERE u.email = :email")
+    @Query("SELECT sp FROM StudentProfile sp JOIN sp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<StudentProfile> findByUserEmail(@Param("email") String email);
 
     Optional<StudentProfile> findByRollNumber(String rollNumber);
 
     boolean existsByRollNumber(String rollNumber);
 
-    @Query("SELECT DISTINCT sp FROM StudentProfile sp " +
-           "LEFT JOIN FETCH sp.academicRecords " +
-           "LEFT JOIN FETCH sp.skills ss " +
-           "LEFT JOIN FETCH ss.skill")
+    @Query("SELECT sp FROM StudentProfile sp")
     List<StudentProfile> findAllWithDetails();
 
-    @Query("SELECT DISTINCT sp FROM StudentProfile sp " +
-           "LEFT JOIN FETCH sp.academicRecords " +
-           "LEFT JOIN FETCH sp.skills ss " +
-           "LEFT JOIN FETCH ss.skill " +
-           "WHERE sp.id = :id")
+    @Query("SELECT sp FROM StudentProfile sp WHERE sp.id = :id")
     Optional<StudentProfile> findWithDetailsById(@Param("id") Long id);
 
-    @Query("SELECT DISTINCT sp FROM StudentProfile sp " +
-           "LEFT JOIN FETCH sp.academicRecords " +
-           "LEFT JOIN FETCH sp.skills ss " +
-           "LEFT JOIN FETCH ss.skill " +
-           "JOIN sp.user u WHERE u.email = :email")
+    @Query("SELECT sp FROM StudentProfile sp JOIN sp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<StudentProfile> findWithDetailsByEmail(@Param("email") String email);
 
-    @Query("SELECT DISTINCT sp FROM StudentProfile sp " +
-           "LEFT JOIN FETCH sp.academicRecords " +
-           "LEFT JOIN FETCH sp.skills ss " +
-           "LEFT JOIN FETCH ss.skill " +
-           "WHERE sp.rollNumber = :rollNumber")
+    @Query("SELECT sp FROM StudentProfile sp WHERE sp.rollNumber = :rollNumber")
     Optional<StudentProfile> findWithDetailsByRollNumber(@Param("rollNumber") String rollNumber);
 }

@@ -15,7 +15,7 @@ public interface TeacherProfileRepository extends JpaRepository<TeacherProfile, 
 
     Optional<TeacherProfile> findByUserId(Long userId);
 
-    @Query("SELECT tp FROM TeacherProfile tp JOIN tp.user u WHERE u.email = :email")
+    @Query("SELECT tp FROM TeacherProfile tp JOIN tp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<TeacherProfile> findByUserEmail(@Param("email") String email);
 
     Optional<TeacherProfile> findByEmployeeId(String employeeId);
@@ -29,6 +29,6 @@ public interface TeacherProfileRepository extends JpaRepository<TeacherProfile, 
     @Query("SELECT DISTINCT tp FROM TeacherProfile tp LEFT JOIN FETCH tp.assignedSubjects WHERE tp.id = :id")
     Optional<TeacherProfile> findWithSubjectsById(@Param("id") Long id);
 
-    @Query("SELECT DISTINCT tp FROM TeacherProfile tp LEFT JOIN FETCH tp.assignedSubjects JOIN tp.user u WHERE u.email = :email")
+    @Query("SELECT DISTINCT tp FROM TeacherProfile tp LEFT JOIN FETCH tp.assignedSubjects JOIN tp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<TeacherProfile> findWithSubjectsByEmail(@Param("email") String email);
 }

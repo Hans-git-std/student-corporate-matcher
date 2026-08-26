@@ -147,4 +147,17 @@ class AdminServiceTest {
         assertThat(stats.getPendingCompanyVerifications()).isEqualTo(5L);
         assertThat(stats.getPendingMarksVerifications()).isEqualTo(35L);
     }
+
+    @Test
+    @DisplayName("Should return list of pending companies requiring verification")
+    void testGetPendingCompanies() {
+        when(companyProfileRepository.findByVerificationStatus(CompanyVerificationStatus.NOT_VERIFIED))
+                .thenReturn(List.of(company));
+
+        List<CompanyProfileResponse> result = adminService.getPendingCompanies();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getCompanyName()).isEqualTo("Enterprise Ltd");
+        assertThat(result.get(0).getVerificationStatus()).isEqualTo(CompanyVerificationStatus.NOT_VERIFIED);
+    }
 }

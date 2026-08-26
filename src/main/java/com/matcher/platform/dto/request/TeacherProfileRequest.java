@@ -23,7 +23,7 @@ public class TeacherProfileRequest {
     @Schema(example = "Computer Science & Engineering")
     private String department;
 
-    @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Phone number must be valid 10-15 digits")
+    @Pattern(regexp = "^(\\+?[0-9]{10,15})?$", message = "Phone number must be valid 10-15 digits")
     @Schema(example = "+1987654321")
     private String phoneNumber;
 

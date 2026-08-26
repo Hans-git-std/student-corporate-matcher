@@ -178,4 +178,30 @@ class TeacherServiceTest {
         assertThat(existingRecord.getIsVerified()).isTrue();
         assertThat(existingRecord.getVerifiedByTeacher()).isEqualTo(teacher);
     }
+
+    @Test
+    @DisplayName("Should return list of students with unverified marks matching teacher assigned subjects")
+    void testGetPendingStudentVerifications() {
+        teacher.setAssignedSubjects(List.of(
+                new TeacherSubject(teacher, "Data Structures")
+        ));
+
+        StudentAcademicRecord unverifiedRecord = StudentAcademicRecord.builder()
+                .id(10L)
+                .student(student)
+                .subjectName("Data Structures")
+                .selfReportedMarks(85.0)
+                .isVerified(false)
+                .build();
+
+        when(teacherProfileRepository.findWithSubjectsByEmail("turing@faculty.edu")).thenReturn(Optional.of(teacher));
+        when(academicRecordRepository.findByIsVerifiedFalse()).thenReturn(List.of(unverifiedRecord));
+
+        List<com.matcher.platform.dto.response.PendingVerificationStudentResponse> result =
+                teacherService.getPendingStudentVerifications("turing@faculty.edu");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getRollNumber()).isEqualTo("CS-2026-089");
+        assertThat(result.get(0).getUnverifiedCount()).isEqualTo(1);
+    }
 }

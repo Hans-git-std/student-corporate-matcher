@@ -15,7 +15,7 @@ public interface CompanyProfileRepository extends JpaRepository<CompanyProfile, 
 
     Optional<CompanyProfile> findByUserId(Long userId);
 
-    @Query("SELECT cp FROM CompanyProfile cp JOIN cp.user u WHERE u.email = :email")
+    @Query("SELECT cp FROM CompanyProfile cp JOIN cp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<CompanyProfile> findByUserEmail(@Param("email") String email);
 
     Optional<CompanyProfile> findByCompanyNameIgnoreCase(String companyName);
@@ -39,7 +39,7 @@ public interface CompanyProfileRepository extends JpaRepository<CompanyProfile, 
            "LEFT JOIN FETCH hc.requiredSkills rs " +
            "LEFT JOIN FETCH rs.skill " +
            "LEFT JOIN FETCH hc.subjectCutoffs sc " +
-           "JOIN cp.user u WHERE u.email = :email")
+           "JOIN cp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<CompanyProfile> findWithCriteriaByEmail(@Param("email") String email);
 
     @Query("SELECT DISTINCT cp FROM CompanyProfile cp " +

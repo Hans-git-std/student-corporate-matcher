@@ -67,25 +67,29 @@ public class StudentService {
 
         Optional<StudentProfile> existingOpt = studentProfileRepository.findByUserEmail(email);
 
+        String normalizedRoll = request.getRollNumber().trim().toUpperCase();
+        String rawPhone = request.getPhoneNumber();
+        String normalizedPhone = (rawPhone != null && !rawPhone.trim().isEmpty()) ? rawPhone.trim() : null;
+
         StudentProfile profile;
         if (existingOpt.isPresent()) {
             profile = existingOpt.get();
             // Check if roll number changed and conflicts
-            if (!profile.getRollNumber().equalsIgnoreCase(request.getRollNumber()) &&
-                    studentProfileRepository.existsByRollNumber(request.getRollNumber())) {
-                throw new BadRequestException("Roll number '" + request.getRollNumber() + "' is already in use by another student");
+            if ((profile.getRollNumber() == null || !profile.getRollNumber().equalsIgnoreCase(normalizedRoll)) &&
+                    studentProfileRepository.existsByRollNumber(normalizedRoll)) {
+                throw new BadRequestException("Roll number '" + normalizedRoll + "' is already in use by another student");
             }
         } else {
-            if (studentProfileRepository.existsByRollNumber(request.getRollNumber())) {
-                throw new BadRequestException("Roll number '" + request.getRollNumber() + "' is already in use by another student");
+            if (studentProfileRepository.existsByRollNumber(normalizedRoll)) {
+                throw new BadRequestException("Roll number '" + normalizedRoll + "' is already in use by another student");
             }
             profile = new StudentProfile();
             profile.setUser(user);
         }
 
-        profile.setFullName(XssSanitizer.sanitize(request.getFullName()));
-        profile.setRollNumber(XssSanitizer.sanitize(request.getRollNumber()));
-        profile.setPhoneNumber(XssSanitizer.sanitize(request.getPhoneNumber()));
+        profile.setFullName(XssSanitizer.sanitize(request.getFullName().trim()));
+        profile.setRollNumber(XssSanitizer.sanitize(normalizedRoll));
+        profile.setPhoneNumber(normalizedPhone != null ? XssSanitizer.sanitize(normalizedPhone) : null);
         profile.setDateOfBirth(request.getDateOfBirth());
         profile.setGender(XssSanitizer.sanitize(request.getGender()));
         profile.setAddress(XssSanitizer.sanitize(request.getAddress()));
@@ -190,8 +194,12 @@ public class StudentService {
         int markCount = 0;
         boolean allVerified = true;
 
-        if (profile.getAcademicRecords() != null && !profile.getAcademicRecords().isEmpty()) {
-            for (StudentAcademicRecord r : profile.getAcademicRecords()) {
+        List<StudentAcademicRecord> records = profile.getId() != null
+                ? academicRecordRepository.findByStudentId(profile.getId())
+                : (profile.getAcademicRecords() != null ? profile.getAcademicRecords() : List.of());
+
+        if (!records.isEmpty()) {
+            for (StudentAcademicRecord r : records) {
                 markResponses.add(mapToMarkResponse(r));
                 totalMarks += r.getEffectiveMark();
                 markCount++;
@@ -204,8 +212,12 @@ public class StudentService {
         }
 
         List<StudentSkillResponse> skillResponses = new ArrayList<>();
-        if (profile.getSkills() != null) {
-            for (StudentSkill ss : profile.getSkills()) {
+        List<StudentSkill> skills = profile.getId() != null
+                ? studentSkillRepository.findByStudentId(profile.getId())
+                : (profile.getSkills() != null ? profile.getSkills() : List.of());
+
+        for (StudentSkill ss : skills) {
+            if (ss.getSkill() != null) {
                 skillResponses.add(new StudentSkillResponse(
                         ss.getId(),
                         ss.getSkill().getName(),

@@ -16,11 +16,11 @@ public class StudentProfileRequest {
     private String fullName;
 
     @NotBlank(message = "Roll number is mandatory")
-    @Pattern(regexp = "^[A-Z0-9-]{4,20}$", message = "Roll number must be alphanumeric with optional dashes (4-20 chars)")
+    @Pattern(regexp = "^(?i)[a-z0-9-]{4,20}$", message = "Roll number must be alphanumeric with optional dashes (4-20 chars)")
     @Schema(example = "CS-2026-089")
     private String rollNumber;
 
-    @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Phone number must be valid 10-15 digits")
+    @Pattern(regexp = "^(\\+?[0-9]{10,15})?$", message = "Phone number must be valid 10-15 digits")
     @Schema(example = "+1234567890")
     private String phoneNumber;
 

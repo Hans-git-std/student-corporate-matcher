@@ -4,6 +4,7 @@ import com.matcher.platform.dto.request.TeacherMarkVerificationEntry;
 import com.matcher.platform.dto.request.TeacherProfileRequest;
 import com.matcher.platform.dto.request.TeacherRegisterRequest;
 import com.matcher.platform.dto.request.VerifyMarksRequest;
+import com.matcher.platform.dto.response.PendingVerificationStudentResponse;
 import com.matcher.platform.dto.response.SubjectMarkResponse;
 import com.matcher.platform.dto.response.TeacherProfileResponse;
 import com.matcher.platform.entity.StudentAcademicRecord;
@@ -27,8 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -157,6 +161,50 @@ public class TeacherService {
         return records.stream().map(this::mapToMarkResponse).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<PendingVerificationStudentResponse> getPendingStudentVerifications(String teacherEmail) {
+        TeacherProfile teacher = teacherProfileRepository.findWithSubjectsByEmail(teacherEmail)
+                .or(() -> teacherProfileRepository.findByUserEmail(teacherEmail))
+                .orElseThrow(() -> new ResourceNotFoundException("TeacherProfile", "email", teacherEmail));
+
+        if (teacher.getApprovalStatus() != ApprovalStatus.APPROVED) {
+            throw new BadRequestException("Teacher account is not approved for official academic verification.");
+        }
+
+        List<TeacherSubject> assignedSubjects = teacher.getAssignedSubjects();
+        boolean hasSubjectRestrictions = assignedSubjects != null && !assignedSubjects.isEmpty();
+
+        List<StudentAcademicRecord> unverifiedRecords = academicRecordRepository.findByIsVerifiedFalse();
+
+        Map<Long, List<StudentAcademicRecord>> recordsByStudent = unverifiedRecords.stream()
+                .filter(r -> r.getStudent() != null)
+                .filter(r -> {
+                    if (!hasSubjectRestrictions) return true;
+                    return assignedSubjects.stream().anyMatch(as ->
+                            StringNormalizer.isFuzzyMatch(as.getSubjectName(), r.getSubjectName()));
+                })
+                .collect(Collectors.groupingBy(r -> r.getStudent().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        List<PendingVerificationStudentResponse> responseList = new ArrayList<>();
+        for (Map.Entry<Long, List<StudentAcademicRecord>> entry : recordsByStudent.entrySet()) {
+            List<StudentAcademicRecord> studentRecords = entry.getValue();
+            if (studentRecords.isEmpty()) continue;
+            StudentProfile student = studentRecords.get(0).getStudent();
+            List<SubjectMarkResponse> markResponses = studentRecords.stream().map(this::mapToMarkResponse).toList();
+
+            responseList.add(PendingVerificationStudentResponse.builder()
+                    .studentId(student.getId())
+                    .studentName(student.getFullName() != null ? student.getFullName() : "Student")
+                    .rollNumber(student.getRollNumber())
+                    .email(student.getUser() != null ? student.getUser().getEmail() : null)
+                    .unverifiedCount(studentRecords.size())
+                    .pendingMarks(markResponses)
+                    .build());
+        }
+
+        return responseList;
+    }
+
     public List<SubjectMarkResponse> verifyStudentMarks(String teacherEmail, String rollNumber, VerifyMarksRequest request) {
         TeacherProfile teacher = teacherProfileRepository.findWithSubjectsByEmail(teacherEmail)
                 .or(() -> teacherProfileRepository.findByUserEmail(teacherEmail))
@@ -174,6 +222,7 @@ public class TeacherService {
 
         List<SubjectMarkResponse> results = new ArrayList<>();
         List<StudentAcademicRecord> existingStudentRecords = academicRecordRepository.findByStudentId(student.getId());
+        List<String> unauthorizedSubjects = new ArrayList<>();
 
         for (TeacherMarkVerificationEntry entry : request.getVerifiedMarks()) {
             String rawSubject = entry.getSubjectName();
@@ -185,10 +234,8 @@ public class TeacherService {
                         StringNormalizer.isFuzzyMatch(as.getSubjectName(), normalizedSubject));
 
                 if (!isAuthorized) {
-                    List<String> authorizedNames = assignedSubjects.stream().map(TeacherSubject::getSubjectName).toList();
-                    throw new BadRequestException(String.format(
-                            "Faculty member '%s' is not authorized to verify marks for subject '%s'. Authorized assigned subjects: %s",
-                            teacher.getFullName(), rawSubject, authorizedNames));
+                    unauthorizedSubjects.add(rawSubject);
+                    continue;
                 }
             }
 
@@ -224,6 +271,13 @@ public class TeacherService {
             }
             StudentAcademicRecord saved = academicRecordRepository.save(record);
             results.add(mapToMarkResponse(saved));
+        }
+
+        if (results.isEmpty() && !unauthorizedSubjects.isEmpty()) {
+            List<String> authorizedNames = assignedSubjects.stream().map(TeacherSubject::getSubjectName).toList();
+            throw new BadRequestException(String.format(
+                    "Faculty member '%s' is not authorized to verify marks for subject '%s'. Authorized assigned subjects: %s",
+                    teacher.getFullName(), unauthorizedSubjects.get(0), authorizedNames));
         }
 
         return results;
