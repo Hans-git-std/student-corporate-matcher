@@ -26,26 +26,12 @@ public interface CompanyProfileRepository extends JpaRepository<CompanyProfile, 
 
     long countByVerificationStatus(CompanyVerificationStatus verificationStatus);
 
-    @Query("SELECT DISTINCT cp FROM CompanyProfile cp " +
-           "LEFT JOIN FETCH cp.hiringCriteria hc " +
-           "LEFT JOIN FETCH hc.requiredSkills rs " +
-           "LEFT JOIN FETCH rs.skill " +
-           "LEFT JOIN FETCH hc.subjectCutoffs sc " +
-           "WHERE cp.id = :id")
+    @Query("SELECT cp FROM CompanyProfile cp WHERE cp.id = :id")
     Optional<CompanyProfile> findWithCriteriaById(@Param("id") Long id);
 
-    @Query("SELECT DISTINCT cp FROM CompanyProfile cp " +
-           "LEFT JOIN FETCH cp.hiringCriteria hc " +
-           "LEFT JOIN FETCH hc.requiredSkills rs " +
-           "LEFT JOIN FETCH rs.skill " +
-           "LEFT JOIN FETCH hc.subjectCutoffs sc " +
-           "JOIN cp.user u WHERE LOWER(u.email) = LOWER(:email)")
+    @Query("SELECT cp FROM CompanyProfile cp JOIN cp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<CompanyProfile> findWithCriteriaByEmail(@Param("email") String email);
 
-    @Query("SELECT DISTINCT cp FROM CompanyProfile cp " +
-           "LEFT JOIN FETCH cp.hiringCriteria hc " +
-           "LEFT JOIN FETCH hc.requiredSkills rs " +
-           "LEFT JOIN FETCH rs.skill " +
-           "LEFT JOIN FETCH hc.subjectCutoffs sc")
+    @Query("SELECT cp FROM CompanyProfile cp")
     List<CompanyProfile> findAllWithCriteria();
 }
