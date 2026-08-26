@@ -1,34 +1,16 @@
 package com.matcher.platform.service;
 
-import com.matcher.platform.dto.request.CompanyProfileRequest;
-import com.matcher.platform.dto.request.CompanyRegisterRequest;
-import com.matcher.platform.dto.request.CompanyStatusUpdateRequest;
-import com.matcher.platform.dto.request.CreateTeacherRequest;
-import com.matcher.platform.dto.request.TeacherRejectRequest;
-import com.matcher.platform.dto.response.AdminDashboardStatsResponse;
-import com.matcher.platform.dto.response.CompanyProfileResponse;
-import com.matcher.platform.dto.response.HiringCriteriaResponse;
-import com.matcher.platform.dto.response.StudentProfileResponse;
-import com.matcher.platform.dto.response.SystemDiagnosticsResponse;
-import com.matcher.platform.dto.response.TeacherProfileResponse;
-import com.matcher.platform.entity.CompanyProfile;
-import com.matcher.platform.entity.HiringCriteria;
-import com.matcher.platform.entity.StudentProfile;
-import com.matcher.platform.entity.TeacherProfile;
-import com.matcher.platform.entity.TeacherSubject;
-import com.matcher.platform.entity.User;
+import com.matcher.platform.dto.request.*;
+import com.matcher.platform.dto.response.*;
+import com.matcher.platform.entity.*;
 import com.matcher.platform.entity.enums.ApprovalStatus;
 import com.matcher.platform.entity.enums.CompanyVerificationStatus;
 import com.matcher.platform.entity.enums.RoleType;
 import com.matcher.platform.exception.BadRequestException;
 import com.matcher.platform.exception.ResourceNotFoundException;
-import com.matcher.platform.repository.CompanyProfileRepository;
-import com.matcher.platform.repository.StudentAcademicRecordRepository;
-import com.matcher.platform.repository.StudentProfileRepository;
-import com.matcher.platform.repository.TeacherProfileRepository;
-import com.matcher.platform.repository.TeacherSubjectRepository;
-import com.matcher.platform.repository.UserRepository;
+import com.matcher.platform.repository.*;
 import com.matcher.platform.security.MailQuotaAndRateLimiter;
+import com.matcher.platform.security.XssSanitizer;
 import com.matcher.platform.util.StringNormalizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -51,8 +33,11 @@ public class AdminService {
     private final StudentProfileRepository studentProfileRepository;
     private final StudentAcademicRecordRepository academicRecordRepository;
     private final UserRepository userRepository;
+    private final HiringCriteriaRepository hiringCriteriaRepository;
+    private final SkillRepository skillRepository;
     private final TeacherService teacherService;
     private final StudentService studentService;
+    private final CompanyService companyService;
     private final MailQuotaAndRateLimiter mailQuotaAndRateLimiter;
 
     @Value("${app.security.admin.email:admin@studentmatcher.com}")
@@ -68,8 +53,11 @@ public class AdminService {
             StudentProfileRepository studentProfileRepository,
             StudentAcademicRecordRepository academicRecordRepository,
             UserRepository userRepository,
+            HiringCriteriaRepository hiringCriteriaRepository,
+            SkillRepository skillRepository,
             TeacherService teacherService,
             StudentService studentService,
+            CompanyService companyService,
             MailQuotaAndRateLimiter mailQuotaAndRateLimiter
     ) {
         this.companyProfileRepository = companyProfileRepository;
@@ -78,8 +66,11 @@ public class AdminService {
         this.studentProfileRepository = studentProfileRepository;
         this.academicRecordRepository = academicRecordRepository;
         this.userRepository = userRepository;
+        this.hiringCriteriaRepository = hiringCriteriaRepository;
+        this.skillRepository = skillRepository;
         this.teacherService = teacherService;
         this.studentService = studentService;
+        this.companyService = companyService;
         this.mailQuotaAndRateLimiter = mailQuotaAndRateLimiter;
     }
 
@@ -170,6 +161,39 @@ public class AdminService {
         return teacherService.mapToProfileResponse(savedTeacher);
     }
 
+    public TeacherProfileResponse updateTeacher(Long id, TeacherProfileRequest request) {
+        TeacherProfile profile = teacherProfileRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("TeacherProfile", "id", id));
+
+        String empId = request.getEmployeeId().trim();
+        if (!profile.getEmployeeId().equalsIgnoreCase(empId) &&
+                teacherProfileRepository.existsByEmployeeId(empId)) {
+            throw new BadRequestException("Employee ID '" + empId + "' is already registered");
+        }
+
+        profile.setFullName(XssSanitizer.sanitize(request.getFullName().trim()));
+        profile.setEmployeeId(XssSanitizer.sanitize(empId));
+        profile.setDepartment(XssSanitizer.sanitize(request.getDepartment().trim()));
+        profile.setPhoneNumber(XssSanitizer.sanitize(request.getPhoneNumber()));
+
+        TeacherProfile saved = teacherProfileRepository.save(profile);
+
+        if (request.getAssignedSubjects() != null) {
+            teacherSubjectRepository.deleteByTeacherId(saved.getId());
+            List<TeacherSubject> subjects = new ArrayList<>();
+            for (String sub : request.getAssignedSubjects()) {
+                if (sub != null && !sub.trim().isEmpty()) {
+                    String normSub = StringNormalizer.normalize(sub);
+                    subjects.add(new TeacherSubject(saved, normSub));
+                }
+            }
+            teacherSubjectRepository.saveAll(subjects);
+            saved.setAssignedSubjects(subjects);
+        }
+
+        return teacherService.mapToProfileResponse(saved);
+    }
+
     public void deleteTeacher(Long id) {
         TeacherProfile teacher = teacherProfileRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("TeacherProfile", "id", id));
@@ -197,6 +221,33 @@ public class AdminService {
         StudentProfile student = studentProfileRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", id));
         return studentService.mapToProfileResponse(student);
+    }
+
+    public StudentProfileResponse updateStudent(Long id, StudentProfileRequest request) {
+        StudentProfile profile = studentProfileRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "id", id));
+
+        String normalizedRoll = request.getRollNumber().trim().toUpperCase();
+        String rawPhone = request.getPhoneNumber();
+        String normalizedPhone = (rawPhone != null && !rawPhone.trim().isEmpty()) ? rawPhone.trim() : null;
+
+        if ((profile.getRollNumber() == null || !profile.getRollNumber().equalsIgnoreCase(normalizedRoll)) &&
+                studentProfileRepository.existsByRollNumber(normalizedRoll)) {
+            throw new BadRequestException("Roll number '" + normalizedRoll + "' is already in use by another student");
+        }
+
+        profile.setFullName(XssSanitizer.sanitize(request.getFullName().trim()));
+        profile.setRollNumber(XssSanitizer.sanitize(normalizedRoll));
+        profile.setPhoneNumber(normalizedPhone != null ? XssSanitizer.sanitize(normalizedPhone) : null);
+        profile.setDateOfBirth(request.getDateOfBirth());
+        profile.setGender(XssSanitizer.sanitize(request.getGender()));
+        profile.setAddress(XssSanitizer.sanitize(request.getAddress()));
+        profile.setBio(XssSanitizer.sanitize(request.getBio()));
+        profile.setGithubUrl(XssSanitizer.sanitize(request.getGithubUrl()));
+        profile.setLinkedinUrl(XssSanitizer.sanitize(request.getLinkedinUrl()));
+
+        StudentProfile saved = studentProfileRepository.save(profile);
+        return studentService.mapToProfileResponse(saved);
     }
 
     public void deleteStudent(Long id) {
@@ -251,6 +302,7 @@ public class AdminService {
                 .websiteUrl(request.getWebsiteUrl())
                 .location(request.getLocation())
                 .description(request.getDescription())
+                .logoUrl(request.getLogoUrl() != null ? request.getLogoUrl().trim() : null)
                 .verificationStatus(CompanyVerificationStatus.VERIFIED)
                 .adminRemarks("Created directly and pre-verified by administrator")
                 .build();
@@ -298,6 +350,115 @@ public class AdminService {
 
         CompanyProfile saved = companyProfileRepository.save(company);
         return mapToCompanyResponse(saved);
+    }
+
+    public HiringCriteriaResponse addCompanyCriteria(Long companyId, HiringCriteriaRequest request) {
+        CompanyProfile company = companyProfileRepository.findById(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Company", "id", companyId));
+
+        HiringCriteria criteria = HiringCriteria.builder()
+                .company(company)
+                .roleTitle(XssSanitizer.sanitize(request.getRoleTitle()))
+                .jobDescription(XssSanitizer.sanitize(request.getJobDescription()))
+                .minOverallPercentage(request.getMinOverallPercentage())
+                .isActive(true)
+                .build();
+
+        HiringCriteria savedCriteria = hiringCriteriaRepository.save(criteria);
+
+        if (request.getRequiredSkills() != null) {
+            for (RequiredSkillEntry skillEntry : request.getRequiredSkills()) {
+                String skillName = StringNormalizer.normalize(skillEntry.getSkillName());
+                Skill skill = skillRepository.findByNameIgnoreCase(skillName)
+                        .orElseGet(() -> skillRepository.save(new Skill(skillName)));
+
+                savedCriteria.getRequiredSkills().add(new CriteriaRequiredSkill(
+                        savedCriteria,
+                        skill,
+                        skillEntry.getMinProficiency(),
+                        skillEntry.getIsMandatory(),
+                        skillEntry.getWeightage()
+                ));
+            }
+        }
+
+        if (request.getSubjectCutoffs() != null) {
+            for (SubjectCutoffEntry cutoffEntry : request.getSubjectCutoffs()) {
+                String subjectName = StringNormalizer.normalize(cutoffEntry.getSubjectName());
+                savedCriteria.getSubjectCutoffs().add(new CriteriaSubjectCutoff(
+                        savedCriteria,
+                        subjectName,
+                        cutoffEntry.getMinMarksCutoff(),
+                        cutoffEntry.getIsMandatory()
+                ));
+            }
+        }
+
+        HiringCriteria finalSaved = hiringCriteriaRepository.save(savedCriteria);
+        return companyService.mapToCriteriaResponse(finalSaved);
+    }
+
+    public HiringCriteriaResponse updateCompanyCriteria(Long companyId, Long criteriaId, HiringCriteriaRequest request) {
+        CompanyProfile company = companyProfileRepository.findById(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Company", "id", companyId));
+
+        HiringCriteria criteria = hiringCriteriaRepository.findById(criteriaId)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringCriteria", "id", criteriaId));
+
+        if (!criteria.getCompany().getId().equals(company.getId())) {
+            throw new BadRequestException("Hiring criteria ID " + criteriaId + " does not belong to company ID " + companyId);
+        }
+
+        criteria.setRoleTitle(XssSanitizer.sanitize(request.getRoleTitle()));
+        criteria.setJobDescription(XssSanitizer.sanitize(request.getJobDescription()));
+        criteria.setMinOverallPercentage(request.getMinOverallPercentage());
+
+        criteria.getRequiredSkills().clear();
+        if (request.getRequiredSkills() != null) {
+            for (RequiredSkillEntry skillEntry : request.getRequiredSkills()) {
+                String skillName = StringNormalizer.normalize(skillEntry.getSkillName());
+                Skill skill = skillRepository.findByNameIgnoreCase(skillName)
+                        .orElseGet(() -> skillRepository.save(new Skill(skillName)));
+
+                criteria.getRequiredSkills().add(new CriteriaRequiredSkill(
+                        criteria,
+                        skill,
+                        skillEntry.getMinProficiency(),
+                        skillEntry.getIsMandatory(),
+                        skillEntry.getWeightage()
+                ));
+            }
+        }
+
+        criteria.getSubjectCutoffs().clear();
+        if (request.getSubjectCutoffs() != null) {
+            for (SubjectCutoffEntry cutoffEntry : request.getSubjectCutoffs()) {
+                String subjectName = StringNormalizer.normalize(cutoffEntry.getSubjectName());
+                criteria.getSubjectCutoffs().add(new CriteriaSubjectCutoff(
+                        criteria,
+                        subjectName,
+                        cutoffEntry.getMinMarksCutoff(),
+                        cutoffEntry.getIsMandatory()
+                ));
+            }
+        }
+
+        HiringCriteria saved = hiringCriteriaRepository.save(criteria);
+        return companyService.mapToCriteriaResponse(saved);
+    }
+
+    public void deleteCompanyCriteria(Long companyId, Long criteriaId) {
+        CompanyProfile company = companyProfileRepository.findById(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Company", "id", companyId));
+
+        HiringCriteria criteria = hiringCriteriaRepository.findById(criteriaId)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringCriteria", "id", criteriaId));
+
+        if (!criteria.getCompany().getId().equals(company.getId())) {
+            throw new BadRequestException("Hiring criteria ID " + criteriaId + " does not belong to company ID " + companyId);
+        }
+
+        hiringCriteriaRepository.delete(criteria);
     }
 
     // ==========================================

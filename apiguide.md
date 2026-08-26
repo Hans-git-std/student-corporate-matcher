@@ -340,10 +340,30 @@ curl -X GET https://student-corporate-matcher.onrender.com/api/v1/ping
 - `POST /api/v1/admin/teachers/{id}/approve`: Approves teacher application and enables marks verification access.
 - `POST /api/v1/admin/teachers/{id}/reject`: Rejects application with custom reason.
 
-### 8.2. Full System CRUD
-- **Teachers**: `GET /api/v1/admin/teachers`, `GET /api/v1/admin/teachers/{id}`, `POST /api/v1/admin/teachers`, `DELETE /api/v1/admin/teachers/{id}`.
-- **Students**: `GET /api/v1/admin/students`, `GET /api/v1/admin/students/{id}`, `DELETE /api/v1/admin/students/{id}`.
-- **Companies**: `GET /api/v1/admin/companies`, `GET /api/v1/admin/companies/{id}`, `DELETE /api/v1/admin/companies/{id}`, `PATCH /api/v1/admin/companies/{id}/status`.
+### 8.2. Full Administrative CRUD Capabilities
+- **Teachers**:
+  - `GET /api/v1/admin/teachers`: List all registered faculty.
+  - `GET /api/v1/admin/teachers/{id}`: Get specific faculty profile.
+  - `POST /api/v1/admin/teachers`: Directly provision and pre-approve a faculty account.
+  - `PUT /api/v1/admin/teachers/{id}`: Modify faculty details (name, employee ID, department, phone, assigned subjects).
+  - `DELETE /api/v1/admin/teachers/{id}`: Delete faculty account.
+- **Students**:
+  - `GET /api/v1/admin/students`: List all registered student profiles.
+  - `GET /api/v1/admin/students/{id}`: Get full student profile, verified marks, and skills.
+  - `PUT /api/v1/admin/students/{id}`: Modify student details (full name, roll number, phone, DOB, gender, address, bio, GitHub/LinkedIn URLs).
+  - `DELETE /api/v1/admin/students/{id}`: Delete student profile, academic marks, and user account.
+- **Companies**:
+  - `GET /api/v1/admin/companies`: List all companies (verified & pending).
+  - `GET /api/v1/admin/companies/pending`: List companies with `NOT_VERIFIED` status.
+  - `GET /api/v1/admin/companies/{id}`: Get specific company details.
+  - `POST /api/v1/admin/companies`: Directly create a pre-verified company record (supports email, name, industry, website, location, description, logoUrl).
+  - `PUT /api/v1/admin/companies/{id}`: Update company information, location, website, description, and logo.
+  - `DELETE /api/v1/admin/companies/{id}`: Delete company profile and account.
+  - `PATCH /api/v1/admin/companies/{id}/status`: Change verification status (`VERIFIED`, `NOT_VERIFIED`, `REJECTED`) with admin remarks.
+- **Company Job Roles & Hiring Criteria (Admin-Managed)**:
+  - `POST /api/v1/admin/companies/{id}/criteria`: Add a new job role, minimum aggregate %, required skills (weightages & proficiencies), and subject cutoff marks.
+  - `PUT /api/v1/admin/companies/{id}/criteria/{criteriaId}`: Update an existing job role and hiring criteria for the company.
+  - `DELETE /api/v1/admin/companies/{id}/criteria/{criteriaId}`: Delete a job role / hiring criteria.
 
 ### 8.3. Real-Time System Diagnostics
 - **Method**: `GET`

@@ -86,6 +86,16 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Teacher account provisioned successfully"));
     }
 
+    @PutMapping("/teachers/{id}")
+    @Operation(summary = "Update Teacher (Admin)", description = "Updates details, department, and assigned subjects of any teacher.")
+    public ResponseEntity<ApiResponse<TeacherProfileResponse>> updateTeacher(
+            @PathVariable Long id,
+            @Valid @RequestBody com.matcher.platform.dto.request.TeacherProfileRequest request
+    ) {
+        TeacherProfileResponse response = adminService.updateTeacher(id, request);
+        return ResponseEntity.ok(ApiResponse.success(response, "Teacher updated successfully by admin"));
+    }
+
     @DeleteMapping("/teachers/{id}")
     @Operation(summary = "Delete Teacher (Admin)", description = "Removes a faculty profile and user account from the system.")
     public ResponseEntity<ApiResponse<String>> deleteTeacher(@PathVariable Long id) {
@@ -109,6 +119,16 @@ public class AdminController {
     public ResponseEntity<ApiResponse<StudentProfileResponse>> getStudentById(@PathVariable Long id) {
         StudentProfileResponse student = adminService.getStudentById(id);
         return ResponseEntity.ok(ApiResponse.success(student, "Student profile retrieved successfully"));
+    }
+
+    @PutMapping("/students/{id}")
+    @Operation(summary = "Update Student (Admin)", description = "Updates profile details, bio, roll number, or links for any student.")
+    public ResponseEntity<ApiResponse<StudentProfileResponse>> updateStudent(
+            @PathVariable Long id,
+            @Valid @RequestBody com.matcher.platform.dto.request.StudentProfileRequest request
+    ) {
+        StudentProfileResponse response = adminService.updateStudent(id, request);
+        return ResponseEntity.ok(ApiResponse.success(response, "Student profile updated successfully by admin"));
     }
 
     @DeleteMapping("/students/{id}")
@@ -175,6 +195,37 @@ public class AdminController {
     ) {
         CompanyProfileResponse response = adminService.updateVerificationStatus(id, request);
         return ResponseEntity.ok(ApiResponse.success(response, "Company status updated to " + request.getStatus()));
+    }
+
+    @PostMapping("/companies/{id}/criteria")
+    @Operation(summary = "Add Company Hiring Criteria (Admin)", description = "Defines a new job role and hiring criteria for a specific company.")
+    public ResponseEntity<ApiResponse<com.matcher.platform.dto.response.HiringCriteriaResponse>> addCompanyCriteria(
+            @PathVariable Long id,
+            @Valid @RequestBody com.matcher.platform.dto.request.HiringCriteriaRequest request
+    ) {
+        com.matcher.platform.dto.response.HiringCriteriaResponse response = adminService.addCompanyCriteria(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Hiring criteria added to company successfully"));
+    }
+
+    @PutMapping("/companies/{id}/criteria/{criteriaId}")
+    @Operation(summary = "Update Company Hiring Criteria (Admin)", description = "Updates an existing job role and hiring criteria for a company.")
+    public ResponseEntity<ApiResponse<com.matcher.platform.dto.response.HiringCriteriaResponse>> updateCompanyCriteria(
+            @PathVariable Long id,
+            @PathVariable Long criteriaId,
+            @Valid @RequestBody com.matcher.platform.dto.request.HiringCriteriaRequest request
+    ) {
+        com.matcher.platform.dto.response.HiringCriteriaResponse response = adminService.updateCompanyCriteria(id, criteriaId, request);
+        return ResponseEntity.ok(ApiResponse.success(response, "Hiring criteria updated successfully by admin"));
+    }
+
+    @DeleteMapping("/companies/{id}/criteria/{criteriaId}")
+    @Operation(summary = "Delete Company Hiring Criteria (Admin)", description = "Removes a specific hiring criteria from a company.")
+    public ResponseEntity<ApiResponse<String>> deleteCompanyCriteria(
+            @PathVariable Long id,
+            @PathVariable Long criteriaId
+    ) {
+        adminService.deleteCompanyCriteria(id, criteriaId);
+        return ResponseEntity.ok(ApiResponse.success("Hiring criteria ID " + criteriaId + " deleted successfully", "Criteria deleted successfully"));
     }
 
     // ==========================================

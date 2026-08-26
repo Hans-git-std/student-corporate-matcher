@@ -101,6 +101,33 @@ public class CompanyController {
         return ResponseEntity.ok(ApiResponse.success(list, "Hiring criteria retrieved successfully"));
     }
 
+    @PutMapping("/criteria/{id}")
+    @PreAuthorize("hasRole('COMPANY')")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "Update Hiring Criteria", description = "Updates an existing hiring criteria by ID for the authenticated company.")
+    public ResponseEntity<ApiResponse<HiringCriteriaResponse>> updateHiringCriteria(
+            Principal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody HiringCriteriaRequest request
+    ) {
+        String email = getEmail(principal);
+        HiringCriteriaResponse response = companyService.updateHiringCriteria(email, id, request);
+        return ResponseEntity.ok(ApiResponse.success(response, "Hiring criteria updated successfully"));
+    }
+
+    @DeleteMapping("/criteria/{id}")
+    @PreAuthorize("hasRole('COMPANY')")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "Delete Hiring Criteria", description = "Removes a specific hiring criteria by ID.")
+    public ResponseEntity<ApiResponse<String>> deleteHiringCriteria(
+            Principal principal,
+            @PathVariable Long id
+    ) {
+        String email = getEmail(principal);
+        companyService.deleteHiringCriteria(email, id);
+        return ResponseEntity.ok(ApiResponse.success("Hiring criteria ID " + id + " deleted successfully", "Criteria deleted successfully"));
+    }
+
     private String getEmail(Principal principal) {
         return principal != null ? principal.getName() : "recruiting@acmetech.com";
     }

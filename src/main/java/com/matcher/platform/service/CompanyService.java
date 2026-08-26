@@ -74,6 +74,7 @@ public class CompanyService {
                 .websiteUrl(XssSanitizer.sanitize(request.getWebsiteUrl()))
                 .location(XssSanitizer.sanitize(request.getLocation()))
                 .description(XssSanitizer.sanitize(request.getDescription()))
+                .logoUrl(request.getLogoUrl() != null ? XssSanitizer.sanitize(request.getLogoUrl()) : null)
                 .verificationStatus(CompanyVerificationStatus.NOT_VERIFIED)
                 .build();
 
@@ -170,6 +171,71 @@ public class CompanyService {
         return list.stream().map(this::mapToCriteriaResponse).toList();
     }
 
+    public HiringCriteriaResponse updateHiringCriteria(String email, Long criteriaId, HiringCriteriaRequest request) {
+        CompanyProfile company = companyProfileRepository.findByUserEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("CompanyProfile", "email", email));
+
+        HiringCriteria criteria = hiringCriteriaRepository.findById(criteriaId)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringCriteria", "id", criteriaId));
+
+        if (!criteria.getCompany().getId().equals(company.getId())) {
+            throw new BadRequestException("Hiring criteria ID " + criteriaId + " does not belong to your company");
+        }
+
+        criteria.setRoleTitle(XssSanitizer.sanitize(request.getRoleTitle()));
+        criteria.setJobDescription(XssSanitizer.sanitize(request.getJobDescription()));
+        criteria.setMinOverallPercentage(request.getMinOverallPercentage());
+
+        // Update skills
+        criteria.getRequiredSkills().clear();
+        if (request.getRequiredSkills() != null) {
+            for (RequiredSkillEntry skillEntry : request.getRequiredSkills()) {
+                String skillName = StringNormalizer.normalize(skillEntry.getSkillName());
+                Skill skill = skillRepository.findByNameIgnoreCase(skillName)
+                        .orElseGet(() -> skillRepository.save(new Skill(skillName)));
+
+                criteria.getRequiredSkills().add(new CriteriaRequiredSkill(
+                        criteria,
+                        skill,
+                        skillEntry.getMinProficiency(),
+                        skillEntry.getIsMandatory(),
+                        skillEntry.getWeightage()
+                ));
+            }
+        }
+
+        // Update cutoffs
+        criteria.getSubjectCutoffs().clear();
+        if (request.getSubjectCutoffs() != null) {
+            for (SubjectCutoffEntry cutoffEntry : request.getSubjectCutoffs()) {
+                String subjectName = StringNormalizer.normalize(cutoffEntry.getSubjectName());
+                criteria.getSubjectCutoffs().add(new CriteriaSubjectCutoff(
+                        criteria,
+                        subjectName,
+                        cutoffEntry.getMinMarksCutoff(),
+                        cutoffEntry.getIsMandatory()
+                ));
+            }
+        }
+
+        HiringCriteria saved = hiringCriteriaRepository.save(criteria);
+        return mapToCriteriaResponse(saved);
+    }
+
+    public void deleteHiringCriteria(String email, Long criteriaId) {
+        CompanyProfile company = companyProfileRepository.findByUserEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("CompanyProfile", "email", email));
+
+        HiringCriteria criteria = hiringCriteriaRepository.findById(criteriaId)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringCriteria", "id", criteriaId));
+
+        if (!criteria.getCompany().getId().equals(company.getId())) {
+            throw new BadRequestException("Hiring criteria ID " + criteriaId + " does not belong to your company");
+        }
+
+        hiringCriteriaRepository.delete(criteria);
+    }
+
     private CompanyProfileResponse mapToProfileResponse(CompanyProfile company) {
         List<HiringCriteriaResponse> criteriaResponses = new ArrayList<>();
         if (company.getHiringCriteria() != null) {
@@ -223,7 +289,7 @@ public class CompanyService {
                 .build();
     }
 
-    private HiringCriteriaResponse mapToCriteriaResponse(HiringCriteria hc) {
+    public HiringCriteriaResponse mapToCriteriaResponse(HiringCriteria hc) {
         List<RequiredSkillResponse> skills = new ArrayList<>();
         if (hc.getRequiredSkills() != null) {
             for (CriteriaRequiredSkill rs : hc.getRequiredSkills()) {

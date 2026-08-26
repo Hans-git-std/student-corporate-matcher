@@ -35,16 +35,24 @@ public class CompanyRegisterRequest {
     @Schema(example = "Leading provider of cloud infrastructure and developer automation tooling.")
     private String description;
 
+    @Schema(example = "https://acmetech.com/logo.png")
+    private String logoUrl;
+
     public CompanyRegisterRequest() {
     }
 
     public CompanyRegisterRequest(String email, String companyName, String industry, String websiteUrl, String location, String description) {
+        this(email, companyName, industry, websiteUrl, location, description, null);
+    }
+
+    public CompanyRegisterRequest(String email, String companyName, String industry, String websiteUrl, String location, String description, String logoUrl) {
         this.email = email;
         this.companyName = companyName;
         this.industry = industry;
         this.websiteUrl = websiteUrl;
         this.location = location;
         this.description = description;
+        this.logoUrl = logoUrl;
     }
 
     public static Builder builder() {
@@ -58,6 +66,7 @@ public class CompanyRegisterRequest {
         private String websiteUrl;
         private String location;
         private String description;
+        private String logoUrl;
 
         public Builder email(String email) {
             this.email = email;
@@ -89,8 +98,13 @@ public class CompanyRegisterRequest {
             return this;
         }
 
+        public Builder logoUrl(String logoUrl) {
+            this.logoUrl = logoUrl;
+            return this;
+        }
+
         public CompanyRegisterRequest build() {
-            return new CompanyRegisterRequest(email, companyName, industry, websiteUrl, location, description);
+            return new CompanyRegisterRequest(email, companyName, industry, websiteUrl, location, description, logoUrl);
         }
     }
 
@@ -140,5 +154,13 @@ public class CompanyRegisterRequest {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getLogoUrl() {
+        return logoUrl;
+    }
+
+    public void setLogoUrl(String logoUrl) {
+        this.logoUrl = logoUrl;
     }
 }
