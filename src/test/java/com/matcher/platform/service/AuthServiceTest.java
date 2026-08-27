@@ -106,13 +106,12 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Should verify OTP and return valid AuthResponse with access token, 28-day refresh token, and auto-provision StudentProfile")
+    @DisplayName("Should verify OTP and return valid AuthResponse with access token and 28-day refresh token")
     void testVerifyOtp() {
         OtpVerifyRequest request = new OtpVerifyRequest("student@university.edu", "123456");
 
         when(otpService.verifyOtp("student@university.edu", "123456")).thenReturn(true);
         when(userRepository.findByEmail("student@university.edu")).thenReturn(Optional.of(user));
-        when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
         when(jwtService.generateAccessToken("student@university.edu", RoleType.ROLE_STUDENT))
                 .thenReturn("mock-access-token");
         when(jwtService.getAccessTokenExpirationMs()).thenReturn(900000L);
@@ -123,7 +122,6 @@ class AuthServiceTest {
         assertThat(response.getRefreshToken()).isNotBlank();
         assertThat(response.getEmail()).isEqualTo("student@university.edu");
         assertThat(response.getRole()).isEqualTo(RoleType.ROLE_STUDENT);
-        verify(studentProfileRepository).save(any(StudentProfile.class));
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 

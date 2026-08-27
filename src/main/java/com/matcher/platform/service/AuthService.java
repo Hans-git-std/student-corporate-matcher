@@ -48,7 +48,6 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TeacherProfileRepository teacherProfileRepository;
-    private final StudentProfileRepository studentProfileRepository;
     private final OtpService otpService;
     private final JwtService jwtService;
     private final EmailService emailService;
@@ -68,7 +67,6 @@ public class AuthService {
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
             TeacherProfileRepository teacherProfileRepository,
-            StudentProfileRepository studentProfileRepository,
             OtpService otpService,
             JwtService jwtService,
             EmailService emailService,
@@ -78,7 +76,6 @@ public class AuthService {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.teacherProfileRepository = teacherProfileRepository;
-        this.studentProfileRepository = studentProfileRepository;
         this.otpService = otpService;
         this.jwtService = jwtService;
         this.emailService = emailService;
@@ -183,20 +180,7 @@ public class AuthService {
             }
         }
 
-        // 4. Auto-provision StudentProfile baseline record if not already present
-        if (user.getRole() == RoleType.ROLE_STUDENT) {
-            try {
-                if (studentProfileRepository.findByUserId(user.getId()).isEmpty()) {
-                    StudentProfile studentProfile = new StudentProfile();
-                    studentProfile.setUser(user);
-                    studentProfileRepository.save(studentProfile);
-                }
-            } catch (Exception e) {
-                log.warn("Could not auto-provision blank StudentProfile entity for userId {}: {}", user.getId(), e.getMessage());
-            }
-        }
-
-        // 5. Generate JWT Access Token
+        // 4. Generate JWT Access Token
         String accessToken = jwtService.generateAccessToken(user.getEmail(), user.getRole());
 
         // 6. Generate & Save Refresh Token (28 Days long-lived lifespan)
