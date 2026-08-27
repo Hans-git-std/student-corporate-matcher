@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,9 +57,23 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public StudentProfileResponse getProfile(String email) {
-        StudentProfile profile = studentProfileRepository.findWithDetailsByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
-        return mapToProfileResponse(profile);
+        String normalizedEmail = email.trim().toLowerCase();
+        Optional<StudentProfile> profileOpt = studentProfileRepository.findWithDetailsByEmail(normalizedEmail)
+                .or(() -> studentProfileRepository.findByUserEmail(normalizedEmail));
+
+        if (profileOpt.isEmpty()) {
+            User user = userRepository.findByEmail(normalizedEmail)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "email", normalizedEmail));
+            return StudentProfileResponse.builder()
+                    .email(user.getEmail())
+                    .aggregatePercentage(0.0)
+                    .allMarksVerified(false)
+                    .verificationRemark("Profile Setup Required")
+                    .academicMarks(new ArrayList<>())
+                    .skills(new ArrayList<>())
+                    .build();
+        }
+        return mapToProfileResponse(profileOpt.get());
     }
 
     public StudentProfileResponse updateOrCreateProfile(String email, StudentProfileRequest request) {
@@ -102,8 +117,9 @@ public class StudentService {
     }
 
     public List<SubjectMarkResponse> selfReportMarks(String email, SelfReportMarksRequest request) {
-        StudentProfile profile = studentProfileRepository.findByUserEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
+        String normalizedEmail = email.trim().toLowerCase();
+        StudentProfile profile = studentProfileRepository.findByUserEmail(normalizedEmail)
+                .orElseThrow(() -> new BadRequestException("Please create and save your student profile before self-reporting marks."));
 
         List<StudentAcademicRecord> existingRecords = academicRecordRepository.findByStudentId(profile.getId());
         List<SubjectMarkResponse> results = new ArrayList<>();
@@ -144,16 +160,20 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public List<SubjectMarkResponse> getAcademicMarks(String email) {
-        StudentProfile profile = studentProfileRepository.findByUserEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
+        String normalizedEmail = email.trim().toLowerCase();
+        Optional<StudentProfile> profileOpt = studentProfileRepository.findByUserEmail(normalizedEmail);
+        if (profileOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        List<StudentAcademicRecord> records = academicRecordRepository.findByStudentId(profile.getId());
+        List<StudentAcademicRecord> records = academicRecordRepository.findByStudentId(profileOpt.get().getId());
         return records.stream().map(this::mapToMarkResponse).toList();
     }
 
     public void addOrUpdateSkill(String email, StudentSkillRequest request) {
-        StudentProfile profile = studentProfileRepository.findByUserEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
+        String normalizedEmail = email.trim().toLowerCase();
+        StudentProfile profile = studentProfileRepository.findByUserEmail(normalizedEmail)
+                .orElseThrow(() -> new BadRequestException("Please create and save your student profile before adding skills."));
 
         String normalizedSkillName = StringNormalizer.normalize(request.getSkillName());
         Skill skill = skillRepository.findByNameIgnoreCase(normalizedSkillName)
@@ -176,8 +196,11 @@ public class StudentService {
     }
 
     public void deleteSkill(String email, String skillName) {
-        StudentProfile profile = studentProfileRepository.findByUserEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "email", email));
+        String normalizedEmail = email.trim().toLowerCase();
+        Optional<StudentProfile> profileOpt = studentProfileRepository.findByUserEmail(normalizedEmail);
+        if (profileOpt.isEmpty()) return;
+
+        StudentProfile profile = profileOpt.get();
         String normalizedSkillName = StringNormalizer.normalize(skillName);
 
         List<StudentSkill> currentSkills = studentSkillRepository.findByStudentId(profile.getId());

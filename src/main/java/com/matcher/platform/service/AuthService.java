@@ -185,10 +185,14 @@ public class AuthService {
 
         // 4. Auto-provision StudentProfile baseline record if not already present
         if (user.getRole() == RoleType.ROLE_STUDENT) {
-            if (studentProfileRepository.findByUserId(user.getId()).isEmpty()) {
-                StudentProfile studentProfile = new StudentProfile();
-                studentProfile.setUser(user);
-                studentProfileRepository.save(studentProfile);
+            try {
+                if (studentProfileRepository.findByUserId(user.getId()).isEmpty()) {
+                    StudentProfile studentProfile = new StudentProfile();
+                    studentProfile.setUser(user);
+                    studentProfileRepository.save(studentProfile);
+                }
+            } catch (Exception e) {
+                log.warn("Could not auto-provision blank StudentProfile entity for userId {}: {}", user.getId(), e.getMessage());
             }
         }
 

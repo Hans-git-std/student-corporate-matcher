@@ -22,8 +22,8 @@ public class OtpVerifyRequest {
     }
 
     public OtpVerifyRequest(String email, String otp) {
-        this.email = email;
-        this.otp = otp;
+        this.email = email != null ? email.trim().toLowerCase() : null;
+        this.otp = otp != null ? otp.trim() : null;
     }
 
     public static Builder builder() {
@@ -35,12 +35,12 @@ public class OtpVerifyRequest {
         private String otp;
 
         public Builder email(String email) {
-            this.email = email;
+            this.email = email != null ? email.trim().toLowerCase() : null;
             return this;
         }
 
         public Builder otp(String otp) {
-            this.otp = otp;
+            this.otp = otp != null ? otp.trim() : null;
             return this;
         }
 
@@ -54,7 +54,7 @@ public class OtpVerifyRequest {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        this.email = email != null ? email.trim().toLowerCase() : null;
     }
 
     public String getOtp() {
@@ -62,6 +62,6 @@ public class OtpVerifyRequest {
     }
 
     public void setOtp(String otp) {
-        this.otp = otp;
+        this.otp = otp != null ? otp.trim() : null;
     }
 }

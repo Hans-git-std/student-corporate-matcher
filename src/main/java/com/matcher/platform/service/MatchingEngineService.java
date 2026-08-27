@@ -32,8 +32,15 @@ public class MatchingEngineService {
 
     @Transactional(readOnly = true)
     public List<CompanyMatchResponse> calculateMatchesForStudent(String studentEmail) {
-        StudentProfile student = studentProfileRepository.findWithDetailsByEmail(studentEmail)
-                .orElseThrow(() -> new IllegalArgumentException("Student profile not found for email: " + studentEmail));
+        String normalizedEmail = studentEmail.trim().toLowerCase();
+        Optional<StudentProfile> studentOpt = studentProfileRepository.findWithDetailsByEmail(normalizedEmail)
+                .or(() -> studentProfileRepository.findByUserEmail(normalizedEmail));
+
+        if (studentOpt.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        StudentProfile student = studentOpt.get();
 
         List<HiringCriteria> allActiveCriteria = hiringCriteriaRepository.findAllActiveWithDetails();
         if (allActiveCriteria.isEmpty()) {

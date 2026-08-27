@@ -20,12 +20,12 @@ public class OtpSendRequest {
     }
 
     public OtpSendRequest(String email) {
-        this.email = email;
+        this.email = email != null ? email.trim().toLowerCase() : null;
         this.role = RoleType.ROLE_STUDENT;
     }
 
     public OtpSendRequest(String email, RoleType role) {
-        this.email = email;
+        this.email = email != null ? email.trim().toLowerCase() : null;
         this.role = role != null ? role : RoleType.ROLE_STUDENT;
     }
 
@@ -38,7 +38,7 @@ public class OtpSendRequest {
         private RoleType role = RoleType.ROLE_STUDENT;
 
         public Builder email(String email) {
-            this.email = email;
+            this.email = email != null ? email.trim().toLowerCase() : null;
             return this;
         }
 
@@ -57,7 +57,7 @@ public class OtpSendRequest {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        this.email = email != null ? email.trim().toLowerCase() : null;
     }
 
     public RoleType getRole() {

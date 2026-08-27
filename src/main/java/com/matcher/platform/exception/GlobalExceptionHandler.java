@@ -5,6 +5,7 @@ import com.matcher.platform.dto.common.ErrorDetail;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -104,12 +105,30 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.METHOD_NOT_ALLOWED);
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.error("Database integrity violation: {}", ex.getMessage(), ex);
+        ApiResponse<Object> response = ApiResponse.error(
+                HttpStatus.CONFLICT.value(),
+                "Database constraint violation. Please verify that submitted identifiers or records do not conflict with existing data.",
+                null
+        );
+        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Illegal argument exception: {}", ex.getMessage());
+        ApiResponse<Object> response = ApiResponse.error(HttpStatus.BAD_REQUEST.value(), ex.getMessage(), null);
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGenericException(Exception ex) {
-        log.error("Unhandled server exception", ex);
+        log.error("Unhandled server exception: {}", ex.getMessage(), ex);
         ApiResponse<Object> response = ApiResponse.error(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "An unexpected internal error occurred. Please try again later.",
+                "An unexpected internal error occurred: " + (ex.getMessage() != null ? ex.getMessage() : "Please contact system administrator"),
                 null
         );
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
