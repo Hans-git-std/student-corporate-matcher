@@ -1,6 +1,7 @@
 package com.matcher.platform.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,9 +50,11 @@ public class StudentProfile {
     @Column(name = "linkedin_url", length = 255)
     private String linkedinUrl;
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<StudentAcademicRecord> academicRecords = new ArrayList<>();
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<StudentSkill> skills = new ArrayList<>();
 

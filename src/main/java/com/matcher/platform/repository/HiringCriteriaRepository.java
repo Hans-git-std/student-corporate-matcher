@@ -16,18 +16,13 @@ public interface HiringCriteriaRepository extends JpaRepository<HiringCriteria, 
 
     List<HiringCriteria> findByCompanyIdAndIsActiveTrue(Long companyId);
 
-    @Query("SELECT DISTINCT hc FROM HiringCriteria hc " +
+    @Query("SELECT hc FROM HiringCriteria hc " +
            "JOIN FETCH hc.company cp " +
-           "LEFT JOIN FETCH hc.requiredSkills rs " +
-           "LEFT JOIN FETCH rs.skill " +
-           "LEFT JOIN FETCH hc.subjectCutoffs sc " +
            "WHERE hc.isActive = true")
     List<HiringCriteria> findAllActiveWithDetails();
 
-    @Query("SELECT DISTINCT hc FROM HiringCriteria hc " +
-           "LEFT JOIN FETCH hc.requiredSkills rs " +
-           "LEFT JOIN FETCH rs.skill " +
-           "LEFT JOIN FETCH hc.subjectCutoffs sc " +
+    @Query("SELECT hc FROM HiringCriteria hc " +
+           "JOIN FETCH hc.company cp " +
            "WHERE hc.id = :id")
     Optional<HiringCriteria> findWithDetailsById(@Param("id") Long id);
 }

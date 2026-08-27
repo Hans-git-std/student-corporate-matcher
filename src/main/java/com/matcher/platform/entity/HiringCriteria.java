@@ -2,6 +2,8 @@ package com.matcher.platform.entity;
 
 import jakarta.persistence.*;
 
+import org.hibernate.annotations.BatchSize;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,9 +35,11 @@ public class HiringCriteria {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "criteria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<CriteriaRequiredSkill> requiredSkills = new ArrayList<>();
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "criteria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<CriteriaSubjectCutoff> subjectCutoffs = new ArrayList<>();
 
