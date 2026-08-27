@@ -1,11 +1,15 @@
 package com.matcher.platform.service;
 
 import com.matcher.platform.dto.request.CompanyStatusUpdateRequest;
+import com.matcher.platform.dto.request.CompanyWithCriteriaRequest;
 import com.matcher.platform.dto.request.CreateTeacherRequest;
+import com.matcher.platform.dto.request.HiringCriteriaRequest;
 import com.matcher.platform.dto.response.AdminDashboardStatsResponse;
 import com.matcher.platform.dto.response.CompanyProfileResponse;
+import com.matcher.platform.dto.response.HiringCriteriaResponse;
 import com.matcher.platform.dto.response.TeacherProfileResponse;
 import com.matcher.platform.entity.CompanyProfile;
+import com.matcher.platform.entity.HiringCriteria;
 import com.matcher.platform.entity.TeacherProfile;
 import com.matcher.platform.entity.User;
 import com.matcher.platform.entity.enums.CompanyVerificationStatus;
@@ -50,10 +54,19 @@ class AdminServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private HiringCriteriaRepository hiringCriteriaRepository;
+
+    @Mock
+    private SkillRepository skillRepository;
+
+    @Mock
     private TeacherService teacherService;
 
     @Mock
     private StudentService studentService;
+
+    @Mock
+    private CompanyService companyService;
 
     @Mock
     private MailQuotaAndRateLimiter mailQuotaAndRateLimiter;
@@ -159,5 +172,82 @@ class AdminServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getCompanyName()).isEqualTo("Enterprise Ltd");
         assertThat(result.get(0).getVerificationStatus()).isEqualTo(CompanyVerificationStatus.NOT_VERIFIED);
+    }
+
+    @Test
+    @DisplayName("Should get criteria for specific company")
+    void testGetCompanyCriteria() {
+        HiringCriteria hc = HiringCriteria.builder()
+                .id(101L)
+                .company(company)
+                .roleTitle("Backend Engineer")
+                .minOverallPercentage(75.0)
+                .build();
+
+        HiringCriteriaResponse mockResp = HiringCriteriaResponse.builder()
+                .id(101L)
+                .roleTitle("Backend Engineer")
+                .minOverallPercentage(75.0)
+                .build();
+
+        when(companyProfileRepository.findById(1L)).thenReturn(Optional.of(company));
+        when(hiringCriteriaRepository.findByCompanyId(1L)).thenReturn(List.of(hc));
+        when(companyService.mapToCriteriaResponse(hc)).thenReturn(mockResp);
+
+        List<HiringCriteriaResponse> list = adminService.getCompanyCriteria(1L);
+
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getRoleTitle()).isEqualTo("Backend Engineer");
+    }
+
+    @Test
+    @DisplayName("Should create company with criteria in composite operation")
+    void testCreateCompanyWithCriteria() {
+        CompanyWithCriteriaRequest request = CompanyWithCriteriaRequest.builder()
+                .email("newcorp@hiring.com")
+                .companyName("Tech Innovators")
+                .industry("IT")
+                .websiteUrl("https://techinnovators.com")
+                .location("Bangalore")
+                .description("Cloud software")
+                .hiringCriteria(List.of(
+                        HiringCriteriaRequest.builder()
+                                .roleTitle("Full Stack Dev")
+                                .minOverallPercentage(70.0)
+                                .build()
+                ))
+                .build();
+
+        User user = new User("newcorp@hiring.com", RoleType.ROLE_COMPANY);
+        CompanyProfile savedComp = CompanyProfile.builder()
+                .id(50L)
+                .user(user)
+                .companyName("Tech Innovators")
+                .verificationStatus(CompanyVerificationStatus.VERIFIED)
+                .hiringCriteria(new ArrayList<>())
+                .build();
+
+        when(userRepository.existsByEmail("newcorp@hiring.com")).thenReturn(false);
+        when(companyProfileRepository.existsByCompanyNameIgnoreCase("Tech Innovators")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(companyProfileRepository.save(any(CompanyProfile.class))).thenReturn(savedComp);
+        when(companyProfileRepository.findById(50L)).thenReturn(Optional.of(savedComp));
+
+        HiringCriteria hc = HiringCriteria.builder()
+                .id(201L)
+                .company(savedComp)
+                .roleTitle("Full Stack Dev")
+                .minOverallPercentage(70.0)
+                .build();
+
+        when(hiringCriteriaRepository.save(any(HiringCriteria.class))).thenReturn(hc);
+        when(companyService.mapToCriteriaResponse(any(HiringCriteria.class))).thenReturn(
+                HiringCriteriaResponse.builder().id(201L).roleTitle("Full Stack Dev").build()
+        );
+
+        CompanyProfileResponse response = adminService.createCompanyWithCriteria(request);
+
+        assertThat(response.getCompanyName()).isEqualTo("Tech Innovators");
+        assertThat(response.getVerificationStatus()).isEqualTo(CompanyVerificationStatus.VERIFIED);
     }
 }

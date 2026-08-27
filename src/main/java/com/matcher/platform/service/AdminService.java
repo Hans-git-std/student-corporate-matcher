@@ -443,6 +443,39 @@ public class AdminService {
         return companyService.mapToCriteriaResponse(saved);
     }
 
+    public CompanyProfileResponse createCompanyWithCriteria(CompanyWithCriteriaRequest request) {
+        CompanyRegisterRequest compReq = CompanyRegisterRequest.builder()
+                .email(request.getEmail())
+                .companyName(request.getCompanyName())
+                .industry(request.getIndustry())
+                .websiteUrl(request.getWebsiteUrl())
+                .location(request.getLocation())
+                .description(request.getDescription())
+                .logoUrl(request.getLogoUrl())
+                .build();
+
+        CompanyProfileResponse companyResponse = createCompany(compReq);
+        Long companyId = companyResponse.getId();
+
+        if (request.getHiringCriteria() != null && !request.getHiringCriteria().isEmpty()) {
+            for (HiringCriteriaRequest critReq : request.getHiringCriteria()) {
+                addCompanyCriteria(companyId, critReq);
+            }
+        }
+
+        return getCompanyById(companyId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<HiringCriteriaResponse> getCompanyCriteria(Long companyId) {
+        CompanyProfile company = companyProfileRepository.findById(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Company", "id", companyId));
+        return hiringCriteriaRepository.findByCompanyId(company.getId())
+                .stream()
+                .map(companyService::mapToCriteriaResponse)
+                .toList();
+    }
+
     public void deleteCompanyCriteria(Long companyId, Long criteriaId) {
         CompanyProfile company = companyProfileRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company", "id", companyId));
@@ -524,12 +557,7 @@ public class AdminService {
         List<HiringCriteriaResponse> criteriaList = new ArrayList<>();
         if (company.getHiringCriteria() != null) {
             for (HiringCriteria hc : company.getHiringCriteria()) {
-                criteriaList.add(HiringCriteriaResponse.builder()
-                        .id(hc.getId())
-                        .roleTitle(hc.getRoleTitle())
-                        .jobDescription(hc.getJobDescription())
-                        .minOverallPercentage(hc.getMinOverallPercentage())
-                        .build());
+                criteriaList.add(companyService.mapToCriteriaResponse(hc));
             }
         }
 

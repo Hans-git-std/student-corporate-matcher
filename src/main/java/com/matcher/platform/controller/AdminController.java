@@ -4,10 +4,12 @@ import com.matcher.platform.dto.common.ApiResponse;
 import com.matcher.platform.dto.request.CompanyProfileRequest;
 import com.matcher.platform.dto.request.CompanyRegisterRequest;
 import com.matcher.platform.dto.request.CompanyStatusUpdateRequest;
+import com.matcher.platform.dto.request.CompanyWithCriteriaRequest;
 import com.matcher.platform.dto.request.CreateTeacherRequest;
 import com.matcher.platform.dto.request.TeacherRejectRequest;
 import com.matcher.platform.dto.response.AdminDashboardStatsResponse;
 import com.matcher.platform.dto.response.CompanyProfileResponse;
+import com.matcher.platform.dto.response.HiringCriteriaResponse;
 import com.matcher.platform.dto.response.StudentProfileResponse;
 import com.matcher.platform.dto.response.SystemDiagnosticsResponse;
 import com.matcher.platform.dto.response.TeacherProfileResponse;
@@ -170,6 +172,13 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Company created and verified by admin"));
     }
 
+    @PostMapping("/companies/with-criteria")
+    @Operation(summary = "Create Company with Criteria (Admin)", description = "Directly creates a pre-verified company and its job roles / hiring criteria in a single composite operation.")
+    public ResponseEntity<ApiResponse<CompanyProfileResponse>> createCompanyWithCriteria(@Valid @RequestBody CompanyWithCriteriaRequest request) {
+        CompanyProfileResponse response = adminService.createCompanyWithCriteria(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Company and hiring criteria provisioned successfully"));
+    }
+
     @PutMapping("/companies/{id}")
     @Operation(summary = "Update Company (Admin)", description = "Updates details of any company in the system.")
     public ResponseEntity<ApiResponse<CompanyProfileResponse>> updateCompany(
@@ -195,6 +204,13 @@ public class AdminController {
     ) {
         CompanyProfileResponse response = adminService.updateVerificationStatus(id, request);
         return ResponseEntity.ok(ApiResponse.success(response, "Company status updated to " + request.getStatus()));
+    }
+
+    @GetMapping("/companies/{id}/criteria")
+    @Operation(summary = "Get Company Hiring Criteria (Admin)", description = "Fetches all hiring criteria defined for a specific company.")
+    public ResponseEntity<ApiResponse<List<HiringCriteriaResponse>>> getCompanyCriteria(@PathVariable Long id) {
+        List<HiringCriteriaResponse> criteria = adminService.getCompanyCriteria(id);
+        return ResponseEntity.ok(ApiResponse.success(criteria, "Company hiring criteria retrieved successfully"));
     }
 
     @PostMapping("/companies/{id}/criteria")
