@@ -17,9 +17,9 @@ public interface StudentAcademicRecordRepository extends JpaRepository<StudentAc
     @Query("SELECT r FROM StudentAcademicRecord r WHERE r.student.rollNumber = :rollNumber")
     List<StudentAcademicRecord> findByStudentRollNumber(@Param("rollNumber") String rollNumber);
 
-    Optional<StudentAcademicRecord> findByStudentIdAndSubjectNameIgnoreCase(Long studentId, String subjectName);
-
+    @Query("SELECT r FROM StudentAcademicRecord r WHERE r.isVerified = false OR r.isVerified IS NULL")
     List<StudentAcademicRecord> findByIsVerifiedFalse();
 
+    @Query("SELECT COUNT(r) FROM StudentAcademicRecord r WHERE r.isVerified = false OR r.isVerified IS NULL")
     long countByIsVerifiedFalse();
 }

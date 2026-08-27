@@ -204,4 +204,8 @@ public class CompanyPublicResponse {
     public void setActiveCriteria(List<HiringCriteriaResponse> activeCriteria) {
         this.activeCriteria = activeCriteria;
     }
+
+    public List<HiringCriteriaResponse> getCriteria() {
+        return activeCriteria;
+    }
 }

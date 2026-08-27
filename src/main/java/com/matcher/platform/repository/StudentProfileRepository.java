@@ -17,7 +17,8 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     @Query("SELECT sp FROM StudentProfile sp JOIN sp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<StudentProfile> findByUserEmail(@Param("email") String email);
 
-    Optional<StudentProfile> findByRollNumber(String rollNumber);
+    @Query("SELECT sp FROM StudentProfile sp WHERE LOWER(sp.rollNumber) = LOWER(:rollNumber)")
+    Optional<StudentProfile> findByRollNumber(@Param("rollNumber") String rollNumber);
 
     boolean existsByRollNumber(String rollNumber);
 
@@ -30,6 +31,6 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     @Query("SELECT sp FROM StudentProfile sp JOIN sp.user u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<StudentProfile> findWithDetailsByEmail(@Param("email") String email);
 
-    @Query("SELECT sp FROM StudentProfile sp WHERE sp.rollNumber = :rollNumber")
+    @Query("SELECT sp FROM StudentProfile sp WHERE LOWER(sp.rollNumber) = LOWER(:rollNumber)")
     Optional<StudentProfile> findWithDetailsByRollNumber(@Param("rollNumber") String rollNumber);
 }
