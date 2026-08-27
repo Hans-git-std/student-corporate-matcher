@@ -176,21 +176,17 @@ public class AdminService {
         profile.setDepartment(XssSanitizer.sanitize(request.getDepartment().trim()));
         profile.setPhoneNumber(XssSanitizer.sanitize(request.getPhoneNumber()));
 
-        TeacherProfile saved = teacherProfileRepository.save(profile);
-
         if (request.getAssignedSubjects() != null) {
-            teacherSubjectRepository.deleteByTeacherId(saved.getId());
-            List<TeacherSubject> subjects = new ArrayList<>();
+            profile.getAssignedSubjects().clear();
             for (String sub : request.getAssignedSubjects()) {
                 if (sub != null && !sub.trim().isEmpty()) {
                     String normSub = StringNormalizer.normalize(sub);
-                    subjects.add(new TeacherSubject(saved, normSub));
+                    profile.getAssignedSubjects().add(new TeacherSubject(profile, normSub));
                 }
             }
-            teacherSubjectRepository.saveAll(subjects);
-            saved.setAssignedSubjects(subjects);
         }
 
+        TeacherProfile saved = teacherProfileRepository.save(profile);
         return teacherService.mapToProfileResponse(saved);
     }
 
