@@ -578,4 +578,44 @@ public class AdminService {
                 .hiringCriteria(criteriaList)
                 .build();
     }
+
+    public BulkSyncResult syncCompaniesFromInfoFolder(String folderPath) {
+        String targetPath = (folderPath != null && !folderPath.trim().isEmpty()) ? folderPath : "C:\\Users\\hans3\\Workspace\\Info";
+        java.io.File dir = new java.io.File(targetPath);
+        if (!dir.exists() || !dir.isDirectory()) {
+            throw new BadRequestException("Target folder does not exist or is not a directory: " + targetPath);
+        }
+
+        java.io.File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".json"));
+        if (files == null || files.length == 0) {
+            return new BulkSyncResult(0, 0, 0, 0, List.of("No JSON files found in " + targetPath));
+        }
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        int created = 0;
+        int skipped = 0;
+        int errors = 0;
+        List<String> messages = new ArrayList<>();
+
+        for (java.io.File f : files) {
+            try {
+                CompanyWithCriteriaRequest request = mapper.readValue(f, CompanyWithCriteriaRequest.class);
+                if (userRepository.existsByEmail(request.getEmail().trim().toLowerCase()) ||
+                    companyProfileRepository.existsByCompanyNameIgnoreCase(request.getCompanyName().trim())) {
+                    skipped++;
+                    messages.add("Skipped existing company: " + request.getCompanyName() + " (" + request.getEmail() + ")");
+                } else {
+                    createCompanyWithCriteria(request);
+                    created++;
+                    messages.add("Created company with criteria: " + request.getCompanyName());
+                }
+            } catch (Exception ex) {
+                errors++;
+                messages.add("Error in " + f.getName() + ": " + ex.getMessage());
+            }
+        }
+
+        return new BulkSyncResult(files.length, created, skipped, errors, messages);
+    }
 }
+

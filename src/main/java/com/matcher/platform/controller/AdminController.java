@@ -179,6 +179,16 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response, "Company and hiring criteria provisioned successfully"));
     }
 
+    @PostMapping("/companies/bulk-sync")
+    @Operation(summary = "Bulk Sync Companies from Info Folder (Admin)", description = "Scans all JSON files in the workspace Info directory and provisions companies along with hiring criteria.")
+    public ResponseEntity<ApiResponse<com.matcher.platform.dto.response.BulkSyncResult>> bulkSyncCompanies(
+            @RequestParam(required = false) String folderPath
+    ) {
+        com.matcher.platform.dto.response.BulkSyncResult result = adminService.syncCompaniesFromInfoFolder(folderPath);
+        return ResponseEntity.ok(ApiResponse.success(result, "Bulk synchronization completed successfully"));
+    }
+
+
     @PutMapping("/companies/{id}")
     @Operation(summary = "Update Company (Admin)", description = "Updates details of any company in the system.")
     public ResponseEntity<ApiResponse<CompanyProfileResponse>> updateCompany(
