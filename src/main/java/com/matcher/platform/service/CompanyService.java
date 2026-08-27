@@ -266,7 +266,7 @@ public class CompanyService {
         List<HiringCriteriaResponse> criteriaResponses = new ArrayList<>();
         if (company.getHiringCriteria() != null) {
             for (HiringCriteria hc : company.getHiringCriteria()) {
-                if (Boolean.TRUE.equals(hc.getIsActive())) {
+                if (hc.getIsActive() == null || Boolean.TRUE.equals(hc.getIsActive())) {
                     criteriaResponses.add(mapToCriteriaResponse(hc));
                 }
             }

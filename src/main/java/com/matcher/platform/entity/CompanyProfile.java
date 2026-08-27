@@ -3,6 +3,8 @@ package com.matcher.platform.entity;
 import com.matcher.platform.entity.enums.CompanyVerificationStatus;
 import jakarta.persistence.*;
 
+import org.hibernate.annotations.BatchSize;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +50,7 @@ public class CompanyProfile {
     @Column(name = "admin_remarks", length = 500)
     private String adminRemarks;
 
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<HiringCriteria> hiringCriteria = new ArrayList<>();
 
