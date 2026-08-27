@@ -1,11 +1,11 @@
 package com.matcher.platform.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.matcher.platform.dto.request.OtpSendRequest;
 import com.matcher.platform.dto.request.OtpVerifyRequest;
 import com.matcher.platform.dto.request.StudentProfileRequest;
 import com.matcher.platform.dto.request.TokenRefreshRequest;
-import com.matcher.platform.entity.OtpToken;
 import com.matcher.platform.entity.enums.RoleType;
 import com.matcher.platform.repository.OtpTokenRepository;
 import com.matcher.platform.repository.RefreshTokenRepository;
@@ -15,6 +15,7 @@ import com.matcher.platform.security.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +27,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -59,16 +62,19 @@ class StudentAuthIntegrationFlowTest {
 
     @BeforeEach
     void cleanDb() {
-        refreshTokenRepository.deleteAll();
-        studentProfileRepository.deleteAll();
-        otpTokenRepository.deleteAll();
-        userRepository.deleteAll();
+        userRepository.findByEmail(testStudentEmail).ifPresent(user -> {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
+            studentProfileRepository.findByUserId(user.getId()).ifPresent(studentProfileRepository::delete);
+            userRepository.delete(user);
+        });
     }
 
     @Test
     @DisplayName("Full End-to-End Student Lifecycle: OTP Request -> Verify & Token -> Baseline Profile -> Update Profile -> Refresh Token")
     void testFullStudentAuthAndProfileLifecycle() throws Exception {
-        // Step 1: Send OTP for brand-new student
+        // -------------------------------------------------------------
+        // Step 1: Request OTP for new student account
+        // -------------------------------------------------------------
         OtpSendRequest sendReq = new OtpSendRequest(testStudentEmail, RoleType.ROLE_STUDENT);
         mockMvc.perform(post("/api/v1/auth/otp/send")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -76,15 +82,76 @@ class StudentAuthIntegrationFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200));
 
-        // Step 2: Retrieve OTP from repository (simulating email delivery)
-        OtpToken token = otpTokenRepository.findTopByEmailAndIsUsedFalseOrderByCreatedAtDesc(testStudentEmail)
-                .orElseThrow();
-        assertThat(token.getEmail()).isEqualTo(testStudentEmail);
-        assertThat(token.getIsUsed()).isFalse();
+        // Capture the exact 6-digit OTP code dispatched to EmailService
+        ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService).sendOtpEmail(eq(testStudentEmail), otpCaptor.capture());
+        String generatedOtp = otpCaptor.getValue();
+        assertThat(generatedOtp).matches("^[0-9]{6}$");
 
-        // Step 3: Verify OTP with the exact code
-        // Note: For integration test, we can verify against OtpService or verify directly
-        // We know OtpService hashes the input with SHA-256. If we need the raw OTP, we test verify with the correct flow.
-        // Let's create an OTP with raw code known:
+        // -------------------------------------------------------------
+        // Step 2: Verify OTP and exchange for Access & Refresh Tokens
+        // -------------------------------------------------------------
+        OtpVerifyRequest verifyReq = new OtpVerifyRequest(testStudentEmail, generatedOtp);
+        MvcResult verifyResult = mockMvc.perform(post("/api/v1/auth/otp/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(verifyReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.email").value(testStudentEmail))
+                .andExpect(jsonPath("$.data.role").value("ROLE_STUDENT"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
+                .andReturn();
+
+        JsonNode authData = objectMapper.readTree(verifyResult.getResponse().getContentAsString()).get("data");
+        String accessToken = authData.get("accessToken").asText();
+        String refreshToken = authData.get("refreshToken").asText();
+
+        // -------------------------------------------------------------
+        // Step 3: Access Student Profile using JWT (Baseline uninitialized profile)
+        // -------------------------------------------------------------
+        mockMvc.perform(get("/api/v1/students/profile")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.email").value(testStudentEmail))
+                .andExpect(jsonPath("$.data.aggregatePercentage").value(0.0))
+                .andExpect(jsonPath("$.data.verificationRemark").value("Profile Setup Required"));
+
+        // -------------------------------------------------------------
+        // Step 4: Populate & Save Student Profile (Roll Number, Full Name, Bio)
+        // -------------------------------------------------------------
+        StudentProfileRequest profileReq = StudentProfileRequest.builder()
+                .fullName("Sarah Connor")
+                .rollNumber("CS-2026-S3")
+                .phoneNumber("+1234567890")
+                .dateOfBirth(LocalDate.of(2003, 7, 21))
+                .gender("Female")
+                .address("100 University Plaza, Tech City")
+                .bio("CS Junior specializing in backend and machine learning")
+                .githubUrl("https://github.com/sarahconnor")
+                .linkedinUrl("https://linkedin.com/in/sarahconnor")
+                .build();
+
+        mockMvc.perform(put("/api/v1/students/profile")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(profileReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.fullName").value("Sarah Connor"))
+                .andExpect(jsonPath("$.data.rollNumber").value("CS-2026-S3"));
+
+        // -------------------------------------------------------------
+        // Step 5: Refresh Access Token with Refresh Token Rotation
+        // -------------------------------------------------------------
+        TokenRefreshRequest refreshReq = new TokenRefreshRequest(refreshToken);
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
     }
 }
