@@ -71,6 +71,9 @@ class AdminServiceTest {
     @Mock
     private MailQuotaAndRateLimiter mailQuotaAndRateLimiter;
 
+    @Mock
+    private OtpTokenRepository otpTokenRepository;
+
     @InjectMocks
     private AdminService adminService;
 

@@ -5,6 +5,7 @@ import com.matcher.platform.config.MethodSecurityConfig;
 import com.matcher.platform.config.SecurityConfig;
 import com.matcher.platform.dto.request.CompanyStatusUpdateRequest;
 import com.matcher.platform.dto.request.CreateTeacherRequest;
+import com.matcher.platform.dto.response.ActiveOtpResponse;
 import com.matcher.platform.dto.response.AdminDashboardStatsResponse;
 import com.matcher.platform.dto.response.CompanyProfileResponse;
 import com.matcher.platform.dto.response.TeacherProfileResponse;
@@ -162,5 +163,37 @@ class AdminControllerTest {
         mockMvc.perform(delete("/api/v1/admin/companies/10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("Company ID 10 has been deleted"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@platform.com", roles = "ADMIN")
+    @DisplayName("GET /api/v1/admin/otps/active - Admin views active OTP challenges")
+    void getActiveOtps_Success() throws Exception {
+        ActiveOtpResponse otp = new ActiveOtpResponse(
+                1L,
+                "student@university.edu",
+                "123456",
+                java.time.Instant.now(),
+                java.time.Instant.now().plusSeconds(600),
+                600L,
+                false,
+                "PENDING"
+        );
+        when(adminService.getActiveOtps()).thenReturn(List.of(otp));
+
+        mockMvc.perform(get("/api/v1/admin/otps/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].email").value("student@university.edu"))
+                .andExpect(jsonPath("$.data[0].otpCode").value("123456"))
+                .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@platform.com", roles = "ADMIN")
+    @DisplayName("DELETE /api/v1/admin/otps/1 - Admin revokes OTP challenge")
+    void deleteOtp_Success() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/otps/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("OTP challenge ID 1 revoked"));
     }
 }

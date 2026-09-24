@@ -64,6 +64,7 @@ public class OtpService {
         OtpToken token = OtpToken.builder()
                 .email(normalizedEmail)
                 .otpHash(otpHash)
+                .otpCode(rawOtp)
                 .expiresAt(expiresAt)
                 .attempts(0)
                 .isUsed(false)

@@ -42,7 +42,7 @@ class PingControllerTest {
         mockMvc.perform(get("/api/v1/ping/mail"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mailSystemHealth").exists())
-                .andExpect(jsonPath("$.totalProviders").value(7))
+                .andExpect(jsonPath("$.totalProviders").value(8))
                 .andExpect(jsonPath("$.providers").isArray());
     }
 

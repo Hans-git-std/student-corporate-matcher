@@ -7,6 +7,7 @@ import com.matcher.platform.dto.request.CompanyStatusUpdateRequest;
 import com.matcher.platform.dto.request.CompanyWithCriteriaRequest;
 import com.matcher.platform.dto.request.CreateTeacherRequest;
 import com.matcher.platform.dto.request.TeacherRejectRequest;
+import com.matcher.platform.dto.response.ActiveOtpResponse;
 import com.matcher.platform.dto.response.AdminDashboardStatsResponse;
 import com.matcher.platform.dto.response.CompanyProfileResponse;
 import com.matcher.platform.dto.response.HiringCriteriaResponse;
@@ -270,5 +271,37 @@ public class AdminController {
     public ResponseEntity<ApiResponse<SystemDiagnosticsResponse>> getSystemDiagnostics() {
         SystemDiagnosticsResponse diag = adminService.getSystemDiagnostics();
         return ResponseEntity.ok(ApiResponse.success(diag, "System diagnostics retrieved successfully"));
+    }
+
+    // ==========================================
+    // Real-Time OTP Verification Challenges
+    // ==========================================
+
+    @GetMapping("/otps/active")
+    @Operation(summary = "List Active OTP Challenges", description = "Fetches currently active, unexpired, and pending OTP verification codes with associated email addresses.")
+    public ResponseEntity<ApiResponse<List<ActiveOtpResponse>>> getActiveOtps() {
+        List<ActiveOtpResponse> active = adminService.getActiveOtps();
+        return ResponseEntity.ok(ApiResponse.success(active, "Active OTP verification challenges retrieved successfully"));
+    }
+
+    @GetMapping("/otps/recent")
+    @Operation(summary = "List Recent OTP Activity", description = "Fetches recent OTP challenges with delivery and verification status.")
+    public ResponseEntity<ApiResponse<List<ActiveOtpResponse>>> getRecentOtps() {
+        List<ActiveOtpResponse> recent = adminService.getRecentOtps();
+        return ResponseEntity.ok(ApiResponse.success(recent, "Recent OTP activity retrieved successfully"));
+    }
+
+    @DeleteMapping("/otps/{id}")
+    @Operation(summary = "Revoke OTP Challenge", description = "Immediately removes or revokes an OTP challenge.")
+    public ResponseEntity<ApiResponse<String>> deleteOtp(@PathVariable Long id) {
+        adminService.deleteOtp(id);
+        return ResponseEntity.ok(ApiResponse.success("OTP challenge ID " + id + " revoked", "OTP revoked successfully"));
+    }
+
+    @DeleteMapping("/otps/expired")
+    @Operation(summary = "Prune Expired OTP Tokens", description = "Removes all expired and consumed OTP tokens from the system.")
+    public ResponseEntity<ApiResponse<String>> pruneExpiredOtps() {
+        int count = adminService.clearExpiredOtps();
+        return ResponseEntity.ok(ApiResponse.success(count + " expired OTPs pruned", "Expired OTP tokens purged successfully"));
     }
 }

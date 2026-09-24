@@ -21,6 +21,9 @@ public class OtpToken {
     @Column(name = "otp_hash", nullable = false, length = 128)
     private String otpHash;
 
+    @Column(name = "otp_code", length = 10)
+    private String otpCode;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
@@ -45,14 +48,19 @@ public class OtpToken {
         this.createdAt = Instant.now();
     }
 
-    public OtpToken(Long id, String email, String otpHash, Instant expiresAt, Integer attempts, Boolean isUsed, Instant createdAt) {
+    public OtpToken(Long id, String email, String otpHash, String otpCode, Instant expiresAt, Integer attempts, Boolean isUsed, Instant createdAt) {
         this.id = id;
         this.email = email;
         this.otpHash = otpHash;
+        this.otpCode = otpCode;
         this.expiresAt = expiresAt;
         this.attempts = attempts != null ? attempts : 0;
         this.isUsed = isUsed != null ? isUsed : false;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
+    }
+
+    public OtpToken(Long id, String email, String otpHash, Instant expiresAt, Integer attempts, Boolean isUsed, Instant createdAt) {
+        this(id, email, otpHash, null, expiresAt, attempts, isUsed, createdAt);
     }
 
     public boolean isExpired() {
@@ -67,6 +75,7 @@ public class OtpToken {
         private Long id;
         private String email;
         private String otpHash;
+        private String otpCode;
         private Instant expiresAt;
         private Integer attempts = 0;
         private Boolean isUsed = false;
@@ -84,6 +93,11 @@ public class OtpToken {
 
         public Builder otpHash(String otpHash) {
             this.otpHash = otpHash;
+            return this;
+        }
+
+        public Builder otpCode(String otpCode) {
+            this.otpCode = otpCode;
             return this;
         }
 
@@ -108,7 +122,7 @@ public class OtpToken {
         }
 
         public OtpToken build() {
-            return new OtpToken(id, email, otpHash, expiresAt, attempts, isUsed, createdAt);
+            return new OtpToken(id, email, otpHash, otpCode, expiresAt, attempts, isUsed, createdAt);
         }
     }
 
@@ -134,6 +148,14 @@ public class OtpToken {
 
     public void setOtpHash(String otpHash) {
         this.otpHash = otpHash;
+    }
+
+    public String getOtpCode() {
+        return otpCode;
+    }
+
+    public void setOtpCode(String otpCode) {
+        this.otpCode = otpCode;
     }
 
     public Instant getExpiresAt() {

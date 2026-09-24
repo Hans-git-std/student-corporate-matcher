@@ -39,6 +39,7 @@ public class AdminService {
     private final StudentService studentService;
     private final CompanyService companyService;
     private final MailQuotaAndRateLimiter mailQuotaAndRateLimiter;
+    private final OtpTokenRepository otpTokenRepository;
 
     @Value("${app.security.admin.email:admin@studentmatcher.com}")
     private String masterAdminEmail;
@@ -58,7 +59,8 @@ public class AdminService {
             TeacherService teacherService,
             StudentService studentService,
             CompanyService companyService,
-            MailQuotaAndRateLimiter mailQuotaAndRateLimiter
+            MailQuotaAndRateLimiter mailQuotaAndRateLimiter,
+            OtpTokenRepository otpTokenRepository
     ) {
         this.companyProfileRepository = companyProfileRepository;
         this.teacherProfileRepository = teacherProfileRepository;
@@ -72,6 +74,7 @@ public class AdminService {
         this.studentService = studentService;
         this.companyService = companyService;
         this.mailQuotaAndRateLimiter = mailQuotaAndRateLimiter;
+        this.otpTokenRepository = otpTokenRepository;
     }
 
     // ==========================================
@@ -616,6 +619,68 @@ public class AdminService {
         }
 
         return new BulkSyncResult(files.length, created, skipped, errors, messages);
+    }
+
+    // ==========================================
+    // Real-Time OTP Challenge & Audit Monitor
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public List<ActiveOtpResponse> getActiveOtps() {
+        Instant now = Instant.now();
+        return otpTokenRepository.findByIsUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(now)
+                .stream()
+                .map(token -> toActiveOtpResponse(token, now))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActiveOtpResponse> getRecentOtps() {
+        Instant now = Instant.now();
+        return otpTokenRepository.findTop50ByOrderByCreatedAtDesc()
+                .stream()
+                .map(token -> toActiveOtpResponse(token, now))
+                .toList();
+    }
+
+    public void deleteOtp(Long id) {
+        if (!otpTokenRepository.existsById(id)) {
+            throw new ResourceNotFoundException("OtpToken", "id", id);
+        }
+        otpTokenRepository.deleteById(id);
+    }
+
+    public int clearExpiredOtps() {
+        Instant now = Instant.now();
+        List<OtpToken> expired = otpTokenRepository.findAll().stream()
+                .filter(t -> t.isExpired() || Boolean.TRUE.equals(t.getIsUsed()))
+                .toList();
+        otpTokenRepository.deleteAll(expired);
+        return expired.size();
+    }
+
+    private ActiveOtpResponse toActiveOtpResponse(OtpToken token, Instant now) {
+        String status;
+        if (Boolean.TRUE.equals(token.getIsUsed())) {
+            status = "VERIFIED";
+        } else if (token.isExpired()) {
+            status = "EXPIRED";
+        } else {
+            status = "PENDING";
+        }
+
+        long remainingSec = Math.max(0, token.getExpiresAt().getEpochSecond() - now.getEpochSecond());
+
+        return new ActiveOtpResponse(
+                token.getId(),
+                token.getEmail(),
+                token.getOtpCode(),
+                token.getCreatedAt(),
+                token.getExpiresAt(),
+                remainingSec,
+                token.getIsUsed(),
+                status
+        );
     }
 }
 
