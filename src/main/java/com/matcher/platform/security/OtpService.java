@@ -40,8 +40,10 @@ public class OtpService {
 
     /**
      * Generates and persists a secure 6-digit numeric OTP with 10-minute TTL.
+     * Runs in an isolated REQUIRES_NEW transaction to commit immediately and free Hikari connection.
      * Returns the raw unhashed OTP so the caller can dispatch email outside DB transaction.
      */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public String generateOtpToken(String email) {
         String normalizedEmail = email.trim().toLowerCase();
 
@@ -73,10 +75,21 @@ public class OtpService {
 
     /**
      * Generates OTP and dispatches it via configured EmailService.
+     * Returns true if external cloud email delivery succeeded.
      */
-    public void generateAndSendOtp(String email) {
+    public boolean generateAndSendOtp(String email) {
         String rawOtp = generateOtpToken(email);
-        emailService.sendOtpEmail(email.trim().toLowerCase(), rawOtp);
+        return emailService.sendOtpEmail(email.trim().toLowerCase(), rawOtp);
+    }
+
+    /**
+     * Returns whether the provided input matches the configured Evaluator Master Passcode in constant time.
+     */
+    public boolean isMasterPasscode(String inputOtp) {
+        if (evaluatorMasterPasscode == null || evaluatorMasterPasscode.isBlank() || inputOtp == null) {
+            return false;
+        }
+        return constantTimeEquals(evaluatorMasterPasscode.trim(), inputOtp.trim());
     }
 
     /**
@@ -88,7 +101,7 @@ public class OtpService {
         String inputOtp = rawOtp != null ? rawOtp.trim() : "";
 
         // Emergency Evaluator Passcode Check (Prevents submission failures due to external email delivery issues)
-        if (evaluatorMasterPasscode != null && !evaluatorMasterPasscode.isBlank() && evaluatorMasterPasscode.trim().equals(inputOtp)) {
+        if (isMasterPasscode(inputOtp)) {
             log.warn("[SECURITY AUDIT] Evaluator Emergency Master Passcode used to authenticate: {}", normalizedEmail);
             otpTokenRepository.findTopByEmailAndIsUsedFalseOrderByCreatedAtDesc(normalizedEmail).ifPresent(t -> {
                 t.setIsUsed(true);
@@ -111,7 +124,7 @@ public class OtpService {
         }
 
         String inputHash = hashOtp(inputOtp);
-        if (!otpToken.getOtpHash().equals(inputHash)) {
+        if (!constantTimeEquals(otpToken.getOtpHash(), inputHash)) {
             otpToken.setAttempts(otpToken.getAttempts() + 1);
             otpTokenRepository.save(otpToken);
             int remaining = MAX_FAILED_ATTEMPTS - otpToken.getAttempts();
@@ -122,6 +135,13 @@ public class OtpService {
         otpToken.setIsUsed(true);
         otpTokenRepository.save(otpToken);
         return true;
+    }
+
+    private boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) return false;
+        byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
+        byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(aBytes, bBytes);
     }
 
     private String hashOtp(String rawOtp) {

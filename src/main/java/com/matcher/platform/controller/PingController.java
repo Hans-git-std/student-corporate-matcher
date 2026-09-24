@@ -53,4 +53,22 @@ public class PingController {
 
         return ResponseEntity.ok(response);
     }
+
+    @org.springframework.web.bind.annotation.PostMapping("/api/v1/ping/mail/test")
+    @Operation(summary = "Trigger Test Email Across Provider Chain", description = "Dispatches a live verification probe to validate email delivery across the active failover vendors.")
+    public ResponseEntity<Map<String, Object>> testMail(@org.springframework.web.bind.annotation.RequestParam String to) {
+        String testSubject = "Test Probe - Student Corporate Matcher Platform";
+        String testBody = "<h3>Multi-Vendor Circuit Breaker Mail Engine</h3><p>This is a live test probe dispatched to verify end-to-end cloud email delivery.</p>";
+
+        boolean success = mailRouter.routeEmail(to.trim(), testSubject, testBody);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("timestamp", Instant.now().toString());
+        response.put("recipient", to.trim());
+        response.put("delivered", success);
+        response.put("message", success ? "Email probe successfully delivered." : "Email probe failed on all providers. Check provider status.");
+        response.put("providers", mailRouter.getProvidersStatus());
+
+        return ResponseEntity.ok(response);
+    }
 }

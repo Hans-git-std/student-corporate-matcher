@@ -57,7 +57,7 @@ public class MailgunMailProvider implements MailProvider {
 
     @Override
     public int getPriority() {
-        return 4;
+        return 5;
     }
 
     @Override

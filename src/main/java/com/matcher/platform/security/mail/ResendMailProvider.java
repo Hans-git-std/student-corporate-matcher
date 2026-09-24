@@ -31,6 +31,9 @@ public class ResendMailProvider implements MailProvider {
     @Value("${app.mail.resend-api-key:}")
     private String resendApiKey;
 
+    @Value("${app.mail.resend-from-email:}")
+    private String resendFromEmail;
+
     @Value("${app.mail.from-email:noreply@studentmatcher.com}")
     private String fromEmail;
 
@@ -56,7 +59,7 @@ public class ResendMailProvider implements MailProvider {
 
     @Override
     public int getPriority() {
-        return 1; // Highest priority
+        return 2;
     }
 
     @Override
@@ -66,8 +69,16 @@ public class ResendMailProvider implements MailProvider {
         }
 
         long startTime = System.currentTimeMillis();
-        String fromFormatted = String.format("%s <%s>", fromName,
-                (fromEmail.contains("@resend.dev") || fromEmail.contains("noreply") ? "onboarding@resend.dev" : fromEmail));
+        String activeFromEmail;
+        if (resendFromEmail != null && !resendFromEmail.trim().isBlank()) {
+            activeFromEmail = resendFromEmail.trim();
+        } else if (fromEmail.contains("@resend.dev") || fromEmail.contains("noreply")) {
+            activeFromEmail = "onboarding@resend.dev";
+        } else {
+            activeFromEmail = fromEmail;
+        }
+
+        String fromFormatted = String.format("%s <%s>", fromName, activeFromEmail);
 
         Map<String, Object> body = Map.of(
                 "from", fromFormatted,
@@ -98,7 +109,9 @@ public class ResendMailProvider implements MailProvider {
                 return true;
             } else {
                 String errorMsg = String.format("Resend API HTTP %d: %s", response.statusCode(), response.body());
-                boolean fatal = response.statusCode() == 401 || response.statusCode() == 403;
+                // Only 401 (invalid/revoked API key) is fatal to circuit breaker. 403 on Resend free tier indicates
+                // unverified recipient on sandbox domain, which should cascade without disabling the provider globally.
+                boolean fatal = response.statusCode() == 401;
                 circuitBreaker.recordFailure(errorMsg, fatal);
                 log.warn("[MAIL DISPATCH FAILURE] {}", errorMsg);
                 return false;

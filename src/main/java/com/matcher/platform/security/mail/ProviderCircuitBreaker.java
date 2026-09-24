@@ -92,7 +92,7 @@ public class ProviderCircuitBreaker {
 
         int failures = consecutiveFailures.incrementAndGet();
 
-        if (isFatal || failures >= failureThreshold) {
+        if (isFatal || state == CircuitState.HALF_OPEN || failures >= failureThreshold) {
             state = CircuitState.OPEN;
             lastTrippedTimestamp = System.currentTimeMillis();
             log.warn("[CIRCUIT BREAKER] Provider '{}' TRIPPED to OPEN! Reason: {}. (Cooldown: {}s)",

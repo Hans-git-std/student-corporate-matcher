@@ -56,7 +56,7 @@ public class BrevoMailProvider implements MailProvider {
 
     @Override
     public int getPriority() {
-        return 2;
+        return 4;
     }
 
     @Override

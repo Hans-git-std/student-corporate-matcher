@@ -12,23 +12,29 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Priority 5 Cloud HTTPS Provider: Postmark via Port 443.
- * Known for world-class sub-200ms deliverability and strict zero-IP-restriction policies.
+ * Priority 1 Cloud HTTPS Provider: Mailjet via Port 443.
+ * 200 free emails/day (6,000/month) with zero IP restrictions.
+ * Allows sending to ANY recipient email address in the world.
  */
 @Component
-public class PostmarkMailProvider implements MailProvider {
+public class MailjetMailProvider implements MailProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(PostmarkMailProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(MailjetMailProvider.class);
 
     private final ObjectMapper objectMapper;
-    private final ProviderCircuitBreaker circuitBreaker = new ProviderCircuitBreaker("Postmark", 2, 5 * 60 * 1000L);
+    private final ProviderCircuitBreaker circuitBreaker = new ProviderCircuitBreaker("Mailjet", 2, 5 * 60 * 1000L);
     private final HttpClient httpClient;
 
-    @Value("${app.mail.postmark-token:}")
-    private String postmarkToken;
+    @Value("${app.mail.mailjet-api-key:}")
+    private String mailjetApiKey;
+
+    @Value("${app.mail.mailjet-secret-key:}")
+    private String mailjetSecretKey;
 
     @Value("${app.mail.from-email:noreply@studentmatcher.com}")
     private String fromEmail;
@@ -36,7 +42,7 @@ public class PostmarkMailProvider implements MailProvider {
     @Value("${app.mail.from-name:Student Corporate Matcher Platform}")
     private String fromName;
 
-    public PostmarkMailProvider(ObjectMapper objectMapper) {
+    public MailjetMailProvider(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(4))
@@ -45,17 +51,18 @@ public class PostmarkMailProvider implements MailProvider {
 
     @Override
     public String getProviderName() {
-        return "Postmark";
+        return "Mailjet";
     }
 
     @Override
     public boolean isConfigured() {
-        return postmarkToken != null && !postmarkToken.trim().isBlank();
+        return mailjetApiKey != null && !mailjetApiKey.trim().isBlank()
+                && mailjetSecretKey != null && !mailjetSecretKey.trim().isBlank();
     }
 
     @Override
     public int getPriority() {
-        return 6;
+        return 1; // Highest priority for universal deliverability
     }
 
     @Override
@@ -65,20 +72,23 @@ public class PostmarkMailProvider implements MailProvider {
         }
 
         long startTime = System.currentTimeMillis();
-        String fromFormatted = String.format("%s <%s>", fromName, fromEmail);
 
-        Map<String, Object> body = Map.of(
-                "From", fromFormatted,
-                "To", toEmail,
+        Map<String, Object> message = Map.of(
+                "From", Map.of("Email", fromEmail.trim(), "Name", fromName.trim()),
+                "To", List.of(Map.of("Email", toEmail.trim())),
                 "Subject", subject,
-                "HtmlBody", htmlContent
+                "HTMLPart", htmlContent
         );
 
+        Map<String, Object> body = Map.of("Messages", List.of(message));
         String jsonPayload = objectMapper.writeValueAsString(body);
 
+        String rawAuth = mailjetApiKey.trim() + ":" + mailjetSecretKey.trim();
+        String authHeader = "Basic " + Base64.getEncoder().encodeToString(rawAuth.getBytes(StandardCharsets.UTF_8));
+
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://api.postmarkapp.com/email"))
-                .header("X-Postmark-Server-Token", postmarkToken.trim())
+                .uri(URI.create("https://api.mailjet.com/v3.1/send"))
+                .header("Authorization", authHeader)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
@@ -90,19 +100,19 @@ public class PostmarkMailProvider implements MailProvider {
             long latency = System.currentTimeMillis() - startTime;
 
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("[MAIL DISPATCH] Delivered to {} via Postmark HTTPS API (Status: {}, Latency: {}ms)",
+                log.info("[MAIL DISPATCH] Delivered to {} via Mailjet HTTPS API (Status: {}, Latency: {}ms)",
                         toEmail, response.statusCode(), latency);
                 circuitBreaker.recordSuccess(latency);
                 return true;
             } else {
-                String errorMsg = String.format("Postmark API HTTP %d: %s", response.statusCode(), response.body());
-                boolean fatal = response.statusCode() == 401; // Invalid server token
+                String errorMsg = String.format("Mailjet API HTTP %d: %s", response.statusCode(), response.body());
+                boolean fatal = response.statusCode() == 401; // Invalid credentials
                 circuitBreaker.recordFailure(errorMsg, fatal);
                 log.warn("[MAIL DISPATCH FAILURE] {}", errorMsg);
                 return false;
             }
         } catch (Exception e) {
-            circuitBreaker.recordFailure("Postmark Connection Error: " + e.getMessage(), false);
+            circuitBreaker.recordFailure("Mailjet Connection Error: " + e.getMessage(), false);
             throw e;
         }
     }

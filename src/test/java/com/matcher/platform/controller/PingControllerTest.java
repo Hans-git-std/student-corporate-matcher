@@ -42,7 +42,18 @@ class PingControllerTest {
         mockMvc.perform(get("/api/v1/ping/mail"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mailSystemHealth").exists())
-                .andExpect(jsonPath("$.totalProviders").value(4))
+                .andExpect(jsonPath("$.totalProviders").value(7))
+                .andExpect(jsonPath("$.providers").isArray());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/ping/mail/test should return 200 OK and execute mail probe")
+    void testMailProbe() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/ping/mail/test")
+                        .param("to", "testprobe@domain.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recipient").value("testprobe@domain.com"))
+                .andExpect(jsonPath("$.delivered").isBoolean())
                 .andExpect(jsonPath("$.providers").isArray());
     }
 }

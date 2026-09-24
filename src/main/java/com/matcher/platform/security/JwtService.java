@@ -97,6 +97,7 @@ public class JwtService {
         try {
             return Jwts.parser()
                     .verifyWith(secretKey)
+                    .clockSkewSeconds(60)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();

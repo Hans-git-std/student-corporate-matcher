@@ -51,7 +51,7 @@ public class SmtpMailProvider implements MailProvider {
 
     @Override
     public int getPriority() {
-        return 6; // Lowest priority behind HTTPS REST APIs
+        return 7; // Lowest priority behind HTTPS REST APIs
     }
 
     @Override

@@ -27,7 +27,7 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
-    public void sendOtpEmail(String recipientEmail, String otpCode) {
+    public boolean sendOtpEmail(String recipientEmail, String otpCode) {
         // 1. High-visibility audit log in server console (guarantees local & cloud log visibility)
         log.info("==========================================================");
         log.info(" [EMAIL OTP DISPATCH] To: {}", recipientEmail);
@@ -45,6 +45,7 @@ public class EmailServiceImpl implements EmailService {
         if (!delivered) {
             log.warn("[EMAIL NOTICE] External cloud delivery failed on all vendors. OTP is logged in console above: {}", otpCode);
         }
+        return delivered;
     }
 
     public List<MailProviderStatusDto> getProviderHealth() {

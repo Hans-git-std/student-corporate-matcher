@@ -118,6 +118,9 @@ public class StudentController {
     }
 
     private String getEmail(Principal principal) {
-        return principal != null ? principal.getName() : "student@university.edu";
+        if (principal == null) {
+            throw new com.matcher.platform.exception.UnauthorizedException("Authentication required: Principal is null");
+        }
+        return principal.getName();
     }
 }

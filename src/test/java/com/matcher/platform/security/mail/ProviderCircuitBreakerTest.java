@@ -66,4 +66,23 @@ class ProviderCircuitBreakerTest {
         assertThat(cb.getSuccessCount()).isEqualTo(1L);
         assertThat(cb.getLastLatencyMs()).isEqualTo(120L);
     }
+
+    @Test
+    @DisplayName("Circuit Breaker should immediately trip back to OPEN if trial request fails during HALF_OPEN")
+    void testFailureInHalfOpenTripsToOpen() throws InterruptedException {
+        ProviderCircuitBreaker cb = new ProviderCircuitBreaker("Mailgun", 3, 50L);
+
+        // Force to OPEN
+        cb.recordFailure("Fatal outage", true);
+        assertThat(cb.getState()).isEqualTo(CircuitState.OPEN);
+
+        Thread.sleep(60L);
+        assertThat(cb.allowRequest()).isTrue();
+        assertThat(cb.getState()).isEqualTo(CircuitState.HALF_OPEN);
+
+        // Trial request fails: must immediately trip back to OPEN without waiting for 3 failures
+        cb.recordFailure("Trial probe connection timed out", false);
+        assertThat(cb.getState()).isEqualTo(CircuitState.OPEN);
+        assertThat(cb.allowRequest()).isFalse();
+    }
 }

@@ -92,4 +92,16 @@ class OtpServiceTest {
         assertThat(token.getIsUsed()).isTrue();
         verify(otpTokenRepository).save(token);
     }
+
+    @Test
+    @DisplayName("Should successfully authenticate using Evaluator Master Passcode")
+    void testVerifyWithEvaluatorMasterPasscode() {
+        org.springframework.test.util.ReflectionTestUtils.setField(otpService, "evaluatorMasterPasscode", "999888");
+
+        boolean isValid = otpService.verifyOtp("evaluator@university.edu", "999888");
+
+        assertThat(isValid).isTrue();
+        assertThat(otpService.isMasterPasscode("999888")).isTrue();
+        assertThat(otpService.isMasterPasscode("wrong")).isFalse();
+    }
 }

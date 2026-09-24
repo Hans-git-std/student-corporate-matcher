@@ -150,4 +150,18 @@ class AuthServiceTest {
         assertThat(existingToken.getIsRevoked()).isTrue();
         verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
     }
+
+    @Test
+    @DisplayName("Should strictly forbid using Evaluator Master Passcode for Admin account")
+    void testVerifyOtp_EvaluatorMasterPasscodeBlockedForAdmin() {
+        User adminUser = new User(2L, "admin@studentmatcher.com", RoleType.ROLE_ADMIN, true, null, null);
+        OtpVerifyRequest request = new OtpVerifyRequest("admin@studentmatcher.com", "999888");
+
+        when(userRepository.findByEmail("admin@studentmatcher.com")).thenReturn(Optional.of(adminUser));
+        when(otpService.isMasterPasscode("999888")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.verifyOtp(request))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Evaluator emergency master passcode cannot be used to authenticate administrative accounts");
+    }
 }

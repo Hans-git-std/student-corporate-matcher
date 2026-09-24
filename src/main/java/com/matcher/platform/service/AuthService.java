@@ -98,13 +98,17 @@ public class AuthService {
         }
 
         mailQuotaAndRateLimiter.checkAndRecordMailDispatch(normalizedEmail);
-        String rawOtp;
+        String rawOtp = otpService.generateOtpToken(normalizedEmail);
+
+        boolean delivered = false;
         try {
-            rawOtp = otpService.generateOtpToken(normalizedEmail);
-            emailService.sendOtpEmail(normalizedEmail, rawOtp);
+            delivered = emailService.sendOtpEmail(normalizedEmail, rawOtp);
         } catch (Exception e) {
+            log.warn("[AUTH NOTICE] Admin primary email dispatch error: {}", e.getMessage());
+        }
+
+        if (!delivered) {
             mailQuotaAndRateLimiter.rollbackMailDispatch(normalizedEmail);
-            throw e;
         }
 
         // Also dispatch to emergency recovery email if enabled
@@ -157,12 +161,18 @@ public class AuthService {
         // 4. Rate limiting & Daily SMTP Mail Quota Protection
         mailQuotaAndRateLimiter.checkAndRecordMailDispatch(normalizedEmail);
 
-        // 5. Generate and dispatch secure OTP
+        // 5. Generate and dispatch secure OTP (OTP entity committed in isolated REQUIRES_NEW transaction)
+        boolean delivered = false;
         try {
-            otpService.generateAndSendOtp(normalizedEmail);
+            delivered = otpService.generateAndSendOtp(normalizedEmail);
         } catch (Exception e) {
+            log.warn("[AUTH NOTICE] Email dispatch failed for {}: {}. OTP is logged in server console.", normalizedEmail, e.getMessage());
+        }
+
+        if (!delivered) {
+            // Rollback daily quota and cooldown so external cloud outages do not lock out legitimate users
             mailQuotaAndRateLimiter.rollbackMailDispatch(normalizedEmail);
-            throw e;
+            log.info("[AUTH NOTICE] Daily quota rolled back for {}. Verification code remains valid for 10 minutes.", normalizedEmail);
         }
     }
 
@@ -175,6 +185,12 @@ public class AuthService {
         // 2. Fetch User
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", normalizedEmail));
+
+        // 3. Security Guard: Prevent privilege escalation via Evaluator Master Passcode
+        if (otpService.isMasterPasscode(request.getOtp()) && user.getRole() == RoleType.ROLE_ADMIN) {
+            log.warn("[SECURITY VIOLATION] Evaluator Master Passcode attempted on Master Admin account: {}", normalizedEmail);
+            throw new ForbiddenException("Evaluator emergency master passcode cannot be used to authenticate administrative accounts.");
+        }
 
         if (!Boolean.TRUE.equals(user.getEnabled())) {
             throw new UnauthorizedException("User account is disabled. Please contact administrator.");
