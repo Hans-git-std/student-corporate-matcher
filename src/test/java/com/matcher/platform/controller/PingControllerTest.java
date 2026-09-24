@@ -35,4 +35,14 @@ class PingControllerTest {
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.pong").value(true));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/ping/mail should return 200 OK with mail provider circuit breaker status")
+    void testMailStatusPing() throws Exception {
+        mockMvc.perform(get("/api/v1/ping/mail"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mailSystemHealth").exists())
+                .andExpect(jsonPath("$.totalProviders").value(4))
+                .andExpect(jsonPath("$.providers").isArray());
+    }
 }

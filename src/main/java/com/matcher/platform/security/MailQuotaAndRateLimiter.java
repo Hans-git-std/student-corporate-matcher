@@ -74,6 +74,19 @@ public class MailQuotaAndRateLimiter {
         }
     }
 
+    /**
+     * Rolls back reserved quota and cooldown when email dispatch fails across all providers.
+     */
+    public synchronized void rollbackMailDispatch(String email) {
+        String normalizedEmail = email.trim().toLowerCase();
+        if (dailyEmailCount.get() > 0) {
+            int decremented = dailyEmailCount.decrementAndGet();
+            log.info("Rolled back daily email quota for {}. Today's total: {}/{}",
+                    normalizedEmail, decremented, dailyMailLimit);
+        }
+        lastEmailDispatchTimestamps.remove(normalizedEmail);
+    }
+
     public int getTodayDispatchCount() {
         return dailyEmailCount.get();
     }

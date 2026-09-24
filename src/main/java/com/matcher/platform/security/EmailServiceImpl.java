@@ -1,193 +1,100 @@
 package com.matcher.platform.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.mail.internet.InternetAddress;
-import jakarta.mail.internet.MimeMessage;
+import com.matcher.platform.security.mail.MailProviderStatusDto;
+import com.matcher.platform.security.mail.ResilientMailRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Enterprise-grade Email Service implementation backed by ResilientMailRouter.
+ * Features:
+ * - Multi-provider failover (Resend -> Brevo -> SendGrid -> SMTP).
+ * - Dynamic circuit breaker preventing IP-block stalls.
+ * - Always prints high-visibility security audit logs in server console.
+ */
 @Service
 public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
 
-    private final JavaMailSender mailSender;
-    private final ObjectMapper objectMapper;
+    private final ResilientMailRouter mailRouter;
 
-    @Value("${spring.mail.username:}")
-    private String smtpUsername;
-
-    @Value("${spring.mail.password:}")
-    private String smtpPassword;
-
-    @Value("${app.mail.from-email:noreply@studentmatcher.com}")
-    private String fromEmail;
-
-    @Value("${app.mail.from-name:Student Corporate Matcher Platform}")
-    private String fromName;
-
-    @Value("${app.mail.brevo-api-key:}")
-    private String brevoApiKey;
-
-    @Value("${app.mail.resend-api-key:}")
-    private String resendApiKey;
-
-    public EmailServiceImpl(@Autowired(required = false) JavaMailSender mailSender, ObjectMapper objectMapper) {
-        this.mailSender = mailSender;
-        this.objectMapper = objectMapper;
+    public EmailServiceImpl(ResilientMailRouter mailRouter) {
+        this.mailRouter = mailRouter;
     }
 
     @Override
     public void sendOtpEmail(String recipientEmail, String otpCode) {
-        // Always log OTP in server console for development / audit visibility
+        // 1. High-visibility audit log in server console (guarantees local & cloud log visibility)
         log.info("==========================================================");
         log.info(" [EMAIL OTP DISPATCH] To: {}", recipientEmail);
         log.info(" [SECURITY CODE] Your 6-Digit One-Time Login Code: {}", otpCode);
-        log.info(" [TTL] Valid for 5 minutes. Never share this code with anyone.");
+        log.info(" [TTL] Valid for 10 minutes. Never share this code with anyone.");
         log.info("==========================================================");
 
-        String htmlContent = String.format("""
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                    <h2 style="color: #2563eb; margin-top: 0;">Student-Corporate Matcher Platform</h2>
-                    <p>Hello,</p>
-                    <p>Use the following 6-digit security code to verify your identity and log into your account:</p>
-                    <div style="background: #f1f5f9; padding: 16px; border-radius: 6px; text-align: center; margin: 24px 0;">
-                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e293b;">%s</span>
-                    </div>
-                    <p style="color: #64748b; font-size: 14px;">This code is valid for <strong>5 minutes</strong>. If you did not request this login code, please ignore this email.</p>
-                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-                    <p style="color: #94a3b8; font-size: 12px; text-align: center;">&copy; 2026 Student-Corporate Matcher Platform. All rights reserved.</p>
-                </div>
+        // 2. Build premium responsive HTML template
+        String htmlContent = buildOtpHtmlTemplate(otpCode);
+        String subject = "Your Verification Code: " + otpCode + " - Student Corporate Matcher";
+
+        // 3. Dispatch through multi-vendor circuit breaker router
+        boolean delivered = mailRouter.routeEmail(recipientEmail, subject, htmlContent);
+
+        if (!delivered) {
+            log.warn("[EMAIL NOTICE] External cloud delivery failed on all vendors. OTP is logged in console above: {}", otpCode);
+        }
+    }
+
+    public List<MailProviderStatusDto> getProviderHealth() {
+        return mailRouter.getProvidersStatus();
+    }
+
+    private String buildOtpHtmlTemplate(String otpCode) {
+        return String.format("""
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Login Verification Code</title>
+                </head>
+                <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%%" style="background-color: #f8fafc; padding: 40px 16px;">
+                        <tr>
+                            <td align="center">
+                                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%%" style="max-width: 540px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); overflow: hidden; border: 1px solid #e2e8f0;">
+                                    <tr>
+                                        <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #f1f5f9;">
+                                            <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #1e293b; letter-spacing: -0.5px;">Student-Corporate Matcher</h1>
+                                            <p style="margin: 6px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Secure Identity Verification</p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 32px;">
+                                            <p style="margin: 0 0 16px; font-size: 15px; line-height: 24px; color: #334155;">Hello,</p>
+                                            <p style="margin: 0 0 24px; font-size: 15px; line-height: 24px; color: #334155;">Use the following single-use verification code to complete your login. This code is valid for <strong>10 minutes</strong>.</p>
+                                            
+                                            <div style="background-color: #f1f5f9; border-radius: 8px; padding: 20px; text-align: center; margin: 28px 0; border: 1px dashed #cbd5e1;">
+                                                <span style="font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 36px; font-weight: 800; letter-spacing: 10px; color: #0f172a;">%s</span>
+                                            </div>
+
+                                            <p style="margin: 0 0 12px; font-size: 13px; line-height: 20px; color: #64748b;">If you did not request this login code, you can safely disregard this email. Your account remains protected.</p>
+                                            <p style="margin: 0; font-size: 13px; line-height: 20px; color: #64748b;"><strong>Security reminder:</strong> Never share this code with anyone. Platform administrators will never ask for your code.</p>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center;">
+                                            <p style="margin: 0; font-size: 12px; color: #94a3b8;">&copy; 2026 Student-Corporate Matcher Platform. Enterprise Zero-Trust Security.</p>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
                 """, otpCode);
-
-        // 1. Priority 1: Direct Brevo HTTPS REST API (Port 443 - Never blocked on Render/Cloud firewalls)
-        if (brevoApiKey != null && !brevoApiKey.isBlank()) {
-            boolean success = sendViaBrevoApi(recipientEmail, otpCode, htmlContent);
-            if (success) {
-                return;
-            }
-        }
-
-        // 2. Priority 2: Direct Resend HTTPS REST API (Port 443)
-        if (resendApiKey != null && !resendApiKey.isBlank()) {
-            boolean success = sendViaResendApi(recipientEmail, otpCode, htmlContent);
-            if (success) {
-                return;
-            }
-        }
-
-        // 3. Priority 3: SMTP / SMTPS via JavaMailSender
-        if (mailSender != null && smtpUsername != null && !smtpUsername.isBlank() && smtpPassword != null && !smtpPassword.isBlank()) {
-            try {
-                MimeMessage message = mailSender.createMimeMessage();
-                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-                helper.setFrom(new InternetAddress(fromEmail, fromName));
-                helper.setTo(recipientEmail);
-                helper.setSubject("Your One-Time Login Code: " + otpCode);
-                helper.setText(htmlContent, true);
-
-                mailSender.send(message);
-                log.info("Real SMTP email successfully delivered to {} via {}", recipientEmail, fromEmail);
-            } catch (Exception e) {
-                log.error("Failed to send real SMTP email to {}. Error: {}", recipientEmail, e.getMessage());
-                log.warn("Tip: Render free tier blocks outbound SMTP ports 25/587. To send real emails from Render, set BREVO_API_KEY (free 300 emails/day at brevo.com) or RESEND_API_KEY.");
-            }
-        } else {
-            log.warn("No active email credentials configured (SMTP, BREVO_API_KEY, or RESEND_API_KEY). OTP displayed in console above.");
-        }
-    }
-
-    private boolean sendViaBrevoApi(String recipientEmail, String otpCode, String htmlContent) {
-        try {
-            Map<String, Object> body = Map.of(
-                    "sender", Map.of("name", fromName, "email", fromEmail),
-                    "to", List.of(Map.of("email", recipientEmail)),
-                    "subject", "Your One-Time Login Code: " + otpCode,
-                    "htmlContent", htmlContent
-            );
-
-            String jsonPayload = objectMapper.writeValueAsString(body);
-
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(10))
-                    .build();
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.brevo.com/v3/smtp/email"))
-                    .header("api-key", brevoApiKey.trim())
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
-                    .timeout(Duration.ofSeconds(10))
-                    .build();
-
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("Real email successfully delivered to {} via Brevo HTTPS API (Status: {})", recipientEmail, response.statusCode());
-                return true;
-            } else {
-                log.error("Brevo HTTPS API returned error {}: {}", response.statusCode(), response.body());
-                return false;
-            }
-        } catch (Exception e) {
-            log.error("Exception during Brevo HTTPS API email delivery to {}: {}", recipientEmail, e.getMessage(), e);
-            return false;
-        }
-    }
-
-    private boolean sendViaResendApi(String recipientEmail, String otpCode, String htmlContent) {
-        try {
-            String fromFormatted = String.format("%s <%s>", fromName,
-                    (fromEmail.contains("@resend.dev") || fromEmail.contains("noreply") ? "onboarding@resend.dev" : fromEmail));
-
-            Map<String, Object> body = Map.of(
-                    "from", fromFormatted,
-                    "to", List.of(recipientEmail),
-                    "subject", "Your One-Time Login Code: " + otpCode,
-                    "html", htmlContent
-            );
-
-            String jsonPayload = objectMapper.writeValueAsString(body);
-
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(10))
-                    .build();
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.resend.com/emails"))
-                    .header("Authorization", "Bearer " + resendApiKey.trim())
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
-                    .timeout(Duration.ofSeconds(10))
-                    .build();
-
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("Real email successfully delivered to {} via Resend HTTPS API (Status: {})", recipientEmail, response.statusCode());
-                return true;
-            } else {
-                log.error("Resend HTTPS API returned error {}: {}", response.statusCode(), response.body());
-                return false;
-            }
-        } catch (Exception e) {
-            log.error("Exception during Resend HTTPS API email delivery to {}: {}", recipientEmail, e.getMessage(), e);
-            return false;
-        }
     }
 }

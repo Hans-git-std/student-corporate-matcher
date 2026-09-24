@@ -98,7 +98,14 @@ public class AuthService {
         }
 
         mailQuotaAndRateLimiter.checkAndRecordMailDispatch(normalizedEmail);
-        otpService.generateAndSendOtp(normalizedEmail);
+        String rawOtp;
+        try {
+            rawOtp = otpService.generateOtpToken(normalizedEmail);
+            emailService.sendOtpEmail(normalizedEmail, rawOtp);
+        } catch (Exception e) {
+            mailQuotaAndRateLimiter.rollbackMailDispatch(normalizedEmail);
+            throw e;
+        }
 
         // Also dispatch to emergency recovery email if enabled
         if (Boolean.TRUE.equals(request.getSendToRecoveryEmail()) &&
@@ -106,7 +113,7 @@ public class AuthService {
                 !adminRecoveryEmail.equalsIgnoreCase(normalizedEmail)) {
             try {
                 log.info("Dispatching mirror security OTP to Admin Emergency Recovery Email: {}", adminRecoveryEmail);
-                emailService.sendOtpEmail(adminRecoveryEmail.trim(), "[EMERGENCY RECOVERY OTP SENT FOR " + normalizedEmail + "]");
+                emailService.sendOtpEmail(adminRecoveryEmail.trim(), rawOtp);
             } catch (Exception e) {
                 log.warn("Failed to dispatch recovery email: {}", e.getMessage());
             }
@@ -151,7 +158,12 @@ public class AuthService {
         mailQuotaAndRateLimiter.checkAndRecordMailDispatch(normalizedEmail);
 
         // 5. Generate and dispatch secure OTP
-        otpService.generateAndSendOtp(normalizedEmail);
+        try {
+            otpService.generateAndSendOtp(normalizedEmail);
+        } catch (Exception e) {
+            mailQuotaAndRateLimiter.rollbackMailDispatch(normalizedEmail);
+            throw e;
+        }
     }
 
     public AuthResponse verifyOtp(OtpVerifyRequest request) {

@@ -61,6 +61,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/api/v1/ping/**",
                                 "/api/v1/ping",
                                 "/ping",
                                 "/api/v1/teachers/register",
